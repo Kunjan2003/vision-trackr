@@ -14,6 +14,8 @@ type Privacy={paused:boolean;hide_window_titles:boolean;retention_days:number;br
 type PrivacyRule={id:number;pattern:string;action:"exclude"|"mask"};
 type Assignment={project_id:number|null;task_id:number|null};
 type IdleItem={id:number;start:string;end:string;seconds:number};
+type ManualRow={id:number;started_at:string;ended_at:string;state:string;note:string};
+const dateTimeLocal=(millis:number)=>{const d=new Date(millis);return localDay(d)+"T"+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");};
 type Focus={id:number;started_at:string;finished_at:string|null;duration_minutes:number;status:"running"|"completed"|"finished";task_id:number|null};
 type Attendance={days:{date:string;work:number;productivity:number;goal_met:boolean;status:string}[];total_work:number;goal_days:number};
 type Insights={work_hours:number;productive_hours:number;productivity:number;context_switches:number;longest_focus_minutes:number;peak_hours:number[];active_days:number;tips:string[]};
@@ -49,6 +51,12 @@ export default function WorkspaceV2({section,onRefresh}:{section:SuiteSection;on
  const [privacyPattern,setPrivacyPattern]=useState("");
  const [privacyAction,setPrivacyAction]=useState<"exclude"|"mask">("exclude");
  const [idle,setIdle]=useState<IdleItem[]>([]);
+ const [manualRows,setManualRows]=useState<ManualRow[]>([]);
+ const [manualDay,setManualDay]=useState(localDay());
+ const [manualStart,setManualStart]=useState(()=>dateTimeLocal(Date.now()-3600000));
+ const [manualEnd,setManualEnd]=useState(()=>dateTimeLocal(Date.now()));
+ const [manualNote,setManualNote]=useState("");
+ const [manualState,setManualState]=useState<"productive"|"neutral"|"break">("productive");
  const [idleDecision,setIdleDecision]=useState<Record<number,string>>({});
  const [focus,setFocus]=useState<Focus|null>(null);
  const [focusMinutes,setFocusMinutes]=useState(25);
@@ -76,8 +84,8 @@ export default function WorkspaceV2({section,onRefresh}:{section:SuiteSection;on
     const [p,t,r,a]=await Promise.all([api("/v2/projects"),api("/v2/tasks"),api("/v2/project-rules"),api("/v2/assignment")]);
     setProjects(p);setTasks(t);setRules(r);setAssignment(a);
    }else if(section==="privacy"){
-    const [p,r,i]=await Promise.all([api("/v2/privacy"),api("/v2/privacy/rules"),api("/v2/idle/pending")]);
-    setPrivacy(p);setPrivacyRules(r);setIdle(i);
+    const [p,r,i,m]=await Promise.all([api("/v2/privacy"),api("/v2/privacy/rules"),api("/v2/idle/pending"),api("/v2/manual?day="+manualDay)]);
+    setPrivacy(p);setPrivacyRules(r);setIdle(i);setManualRows(m);
    }else if(section==="focus"){setFocus(await api("/v2/focus"));}
    else if(section==="attendance"){
     const [year,m]=month.split("-").map(Number);
@@ -88,7 +96,7 @@ export default function WorkspaceV2({section,onRefresh}:{section:SuiteSection;on
    else if(section==="browser"){setPrivacy(await api("/v2/privacy"));}
    setError("");
   }catch(e){setError(errorMsg(e));}
- },[section,month,calendarDay,reportStart,reportEnd]);
+ },[section,month,calendarDay,reportStart,reportEnd,manualDay]);
  useEffect(()=>{void refresh();},[refresh]);
  useEffect(()=>{if(section==="backups")void window.workpulse.getAutoUpdates().then(x=>{setUpdateEnabled(x.enabled);setSignedInstaller(x.signed);}).catch(()=>{});},[section]);
  useEffect(()=>{if(section!=="focus")return;const i=setInterval(()=>{setClock(Date.now());void api("/v2/focus").then(setFocus).catch(()=>{});},5000);return ()=>clearInterval(i);},[section]);
@@ -189,6 +197,19 @@ export default function WorkspaceV2({section,onRefresh}:{section:SuiteSection;on
    </div></section>
    <div className="suite-grid suite-space"><section className="panel"><h3>Sensitive application rules</h3><p className="muted">Exclude an application entirely or mask its window titles.</p><div className="suite-form"><input aria-label="Privacy app pattern" placeholder="App name or title keyword" value={privacyPattern} onChange={e=>setPrivacyPattern(e.target.value)}/><select aria-label="Privacy action" value={privacyAction} onChange={e=>setPrivacyAction(e.target.value as "exclude"|"mask")}><option value="exclude">Exclude tracking</option><option value="mask">Mask titles</option></select><button className="primary" disabled={busy||privacyPattern.trim().length<2} onClick={()=>void run(async()=>{await api("/v2/privacy/rules","POST",{pattern:privacyPattern,action:privacyAction});setPrivacyPattern("");},"Privacy rule added.")}><Plus size={15}/> Add rule</button></div><div className="mini-list">{privacyRules.map(rule=><div className="mini-row" key={rule.id}><LockKeyhole size={16}/><span><b>{rule.pattern}</b><small>{rule.action==="exclude"?"Never record":"Hide title"}</small></span><button className="icon-action" onClick={()=>void run(()=>api("/v2/privacy/rules/"+rule.id,"DELETE"),"Rule removed.")}><Trash2 size={16}/></button></div>)}</div></section>
     <section className="panel"><h3>Review idle periods</h3><p className="muted">Correct time away from your device after returning. Unreviewed idle intervals stay idle.</p><div className="mini-list">{!idle.length&&<p className="small-note">No pending idle periods.</p>}{idle.map(item=><div className="idle-review" key={item.id}><strong>{new Date(item.start).toLocaleTimeString()} · {duration(item.seconds)}</strong><div className="suite-actions"><select aria-label={"Classify idle "+item.id} value={idleDecision[item.id]||"keep_idle"} onChange={e=>setIdleDecision({...idleDecision,[item.id]:e.target.value})}><option value="keep_idle">Keep idle</option><option value="productive">Worked away</option><option value="neutral">Neutral work</option><option value="break">Break</option></select><button className="secondary" onClick={()=>void run(()=>api("/v2/idle/"+item.id+"/resolve","POST",{decision:idleDecision[item.id]||"keep_idle"}),"Idle interval reviewed.")}><CheckCircle2 size={15}/> Apply</button></div></div>)}</div></section></div>
+
+   <section className="panel suite-space"><div className="panel-heading"><div><h3>Manual time entry</h3><p>Add work performed away from your computer. Entries cannot overlap captured activities.</p></div></div>
+    <div className="suite-actions"><label>Started <input type="datetime-local" value={manualStart} onChange={e=>setManualStart(e.target.value)}/></label>
+    <label>Ended <input type="datetime-local" value={manualEnd} onChange={e=>setManualEnd(e.target.value)}/></label>
+    <label>Classification<select value={manualState} onChange={e=>setManualState(e.target.value as "productive"|"neutral"|"break")}><option value="productive">Productive</option><option value="neutral">Neutral</option><option value="break">Break</option></select></label></div>
+    <div className="suite-actions suite-space"><input aria-label="Time entry note" placeholder="Note about time away" value={manualNote} onChange={e=>setManualNote(e.target.value)} maxLength={300}/>
+      <button disabled={busy||!manualStart||!manualEnd} className="primary" onClick={()=>void run(async()=>{
+        await api("/v2/manual","POST",{started_at:new Date(manualStart).toISOString(),ended_at:new Date(manualEnd).toISOString(),state:manualState,note:manualNote});
+        setManualNote("");
+      },"Manual time recorded.")}><Plus size={15}/> Add time</button>
+    </div><div className="suite-actions suite-space"><label>Browse day <input type="date" value={manualDay} onChange={e=>setManualDay(e.target.value)}/></label></div>
+    <div className="mini-list">{manualRows.map(row=><div className="mini-row" key={row.id}><FileClock size={17}/><span><b>{new Date(row.started_at).toLocaleTimeString()} – {new Date(row.ended_at).toLocaleTimeString()} · {row.state}</b><small>{row.note||"Manual correction"}</small></span><button className="icon-action" title="Remove manual time" onClick={()=>void run(()=>api("/v2/manual/"+row.id,"DELETE"),"Manual entry removed.")}><Trash2 size={16}/></button></div>)}{!manualRows.length&&<p className="small-note">No manual entries for this day.</p>}</div>
+   </section>
   </>}
 
   {section==="calendar"&&<div className="suite-grid"><section className="panel"><CalendarDays size={31} color="#83eabb"/><h3 className="suite-space">Import an iCalendar file</h3><p className="muted">Export an .ics file from your preferred calendar and import it locally. Descriptions and attendee addresses are discarded. Meeting detection must be enabled under Privacy.</p><div className="suite-actions suite-space"><button className="primary" disabled={busy} onClick={()=>void run(async()=>{const result=await window.workpulse.importCalendar();if(result)setNotice("Imported "+result.imported+" calendar events.");},"Calendar imported.")}><Plus size={16}/> Select .ics file</button></div></section>
