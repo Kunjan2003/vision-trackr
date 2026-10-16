@@ -85,6 +85,7 @@ class Tracker:
                 raise ValueError("No active session for this action")
             # Never credit unobserved intervals during a state transition.
             result.last_tick_at = now
+            result.state_since = now
             db.flush()
             return result
 

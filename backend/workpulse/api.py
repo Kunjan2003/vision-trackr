@@ -68,7 +68,8 @@ def me(user: User = Depends(current_user)):
 
 def session_state(db: Session, user_id: int):
     s = db.scalar(select(WorkSession).where(WorkSession.user_id == user_id).order_by(WorkSession.id.desc()))
-    return {"status": s.status if s and s.finished_at is None else "finished",
+    return {"break_seconds": max(0, (datetime.utcnow() - (s.state_since or s.started_at)).total_seconds()) if s and s.finished_at is None and s.status == "break" else 0,
+            "status": s.status if s and s.finished_at is None else "finished",
             "started_at": s.started_at.isoformat()+"Z" if s and s.finished_at is None else None,
             "session_id": s.id if s and s.finished_at is None else None}
 
@@ -109,6 +110,18 @@ async def live_socket(ws: WebSocket):
                 state = {**session_state(db, user_id), "state": agent.last_state, "foreground": agent.foreground}
                 # Lightweight today totals for live timer.
                 state["today"] = day_stats(db, user_id, date.today(), -int(datetime.now().astimezone().utcoffset().total_seconds() / 60))["totals"]
+                s = db.scalar(select(WorkSession).where(WorkSession.user_id == user_id, WorkSession.finished_at.is_(None)).order_by(WorkSession.id.desc()))
+                if s:
+                    age = max(0.0, min(8.0, (datetime.utcnow() - s.last_tick_at).total_seconds()))
+                    which = "break" if s.status == "break" else agent.last_state
+                    if which not in ("productive", "neutral", "non_productive", "idle", "break"):
+                        which = "neutral"
+                    state["today"][which] += age
+                    if which != "break":
+                        state["today"]["work"] += age
+                    t = state["today"]
+                    t["productivity"] = round(100*t["productive"]/t["work"], 1) if t["work"] else 0.0
+                state["reminder"] = agent.reminder
             await ws.send_json(state)
             await asyncio.sleep(1)
     except (WebSocketDisconnect, asyncio.TimeoutError, ValueError, KeyError):

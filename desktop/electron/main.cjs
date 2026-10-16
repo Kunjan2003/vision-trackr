@@ -1,5 +1,5 @@
 "use strict";
-const {app,BrowserWindow,Tray,Menu,ipcMain,dialog,safeStorage,nativeImage}=require("electron");
+const {app,BrowserWindow,Tray,Menu,Notification,ipcMain,dialog,safeStorage,nativeImage}=require("electron");
 const {randomBytes}=require("node:crypto");
 const {join,resolve}=require("node:path");
 const {existsSync,readFileSync,writeFileSync}=require("node:fs");
@@ -8,7 +8,7 @@ const {spawn}=require("node:child_process");
 const {WebSocket}=require("ws");
 if(!app.requestSingleInstanceLock()){app.quit();process.exit(0);}
 let dashboard,widget,tray,backend,socket;
-let port=null,token=null,quitting=false,restartTimer=null;
+let port=null,token=null,quitting=false,restartTimer=null,lastReminder=null;
 const capability=randomBytes(48).toString("hex");
 const sessionPath=()=>join(app.getPath("userData"),"session.enc");
 function loadSession(){try{if(safeStorage.isEncryptionAvailable()&&existsSync(sessionPath()))token=safeStorage.decryptString(readFileSync(sessionPath()));}catch{token=null;}}
@@ -33,7 +33,10 @@ function connectLive(){
  if(!port||!token)return;
  const ws=new WebSocket("ws://127.0.0.1:"+port+"/ws/live");socket=ws;
  ws.addEventListener("open",()=>{if(socket===ws)ws.send(JSON.stringify({agent:capability,token}));});
- ws.addEventListener("message",e=>{try{broadcast("live:state",JSON.parse(e.data));}catch{}});
+ ws.addEventListener("message",e=>{try{const data=JSON.parse(e.data);broadcast("live:state",data);
+  if(data.reminder?.id&&data.reminder.id!==lastReminder){lastReminder=data.reminder.id;
+   if(Notification.isSupported())new Notification({title:"WorkPulse - Break reminder",body:data.reminder.message}).show();}
+  }catch{}});
  ws.addEventListener("close",()=>{if(socket===ws){socket=null;if(!quitting&&port&&token)setTimeout(()=>{if(!socket)connectLive();},2000);}});
  ws.addEventListener("error",()=>{});
 }

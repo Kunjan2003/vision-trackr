@@ -10,6 +10,7 @@ export default function Widget(){
  const isBreak=live?.status==="break";
  const finished=live?.status==="finished";
  const label=finished?"Finished":isBreak?"On break":live?.state==="idle"?"Idle":"Working";
+ const timer=isBreak?(live?.break_seconds||0):(live?.today?.work||0);
  async function change(action:string){
   if(action==="finish"&&!window.confirm("Finish your workday? Your activity will be saved."))return;
   setBusy(true);
@@ -19,7 +20,7 @@ export default function Widget(){
  }
  function toggle(compactMode:boolean){setCompact(compactMode);void window.workpulse.shrinkWidget(compactMode);}
  return <div className={"widget-shell "+(compact?"compact":"")}>
-  {compact?<div className="widget-pill drag"><span className="status-dot"/><span className="widget-time">{duration(live?.today?.work||0)}</span><button className="icon-action no-drag" aria-label="Expand widget" onClick={()=>toggle(false)}><Maximize2 size={15}/></button></div>:
+  {compact?<div className="widget-pill drag"><span className="status-dot"/><span className="widget-time">{duration(timer)}</span><button className="icon-action no-drag" aria-label="Expand widget" onClick={()=>toggle(false)}><Maximize2 size={15}/></button></div>:
    <><div className="widget-header drag"><span className="brandmark"><Activity size={14}/></span><strong>WorkPulse</strong><span className="widget-spacer"/><button className="icon-action no-drag" title="Compact widget" onClick={()=>toggle(true)}><Minimize2 size={14}/></button><button className="icon-action no-drag" title="Dashboard" onClick={()=>window.workpulse.showDashboard()}><ArrowUpRight size={15}/></button></div>
    <div className="widget-main"><div><span className={"status-dot "+(isBreak?"pause":"")}/><span className="widget-status">{label}</span></div><div className="widget-clock">{duration(live?.today?.work||0)}</div>
     <div className="widget-actions">{finished?<button className="widget-primary" disabled={busy} onClick={()=>change("start")}><Play size={13}/> Start work</button>:<><button className="widget-primary" disabled={busy} onClick={()=>change(isBreak?"resume":"break")}>{isBreak?<Play size={13}/>:<Coffee size={13}/>} {isBreak?"Resume":"Take break"}</button><button className="widget-secondary" disabled={busy} onClick={()=>change("finish")}><Square size={12}/> Finish day</button></>}</div>
