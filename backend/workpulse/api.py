@@ -248,3 +248,8 @@ app.include_router(advanced_router)
 
 from .browser_bridge import router as browser_router
 app.include_router(browser_router)
+
+from .backup import router as backup_router
+app.include_router(backup_router)
+from .calendar_api import router as calendar_router
+app.include_router(calendar_router)
