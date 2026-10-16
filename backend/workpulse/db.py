@@ -31,6 +31,9 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 def migrate() -> None:
     """Upgrade schema on startup, also inside PyInstaller's _MEIPASS bundle."""
+    from .backup import apply_pending_restore, ensure_migration_snapshot
+    apply_pending_restore()
+    ensure_migration_snapshot()
     from alembic import command
     from alembic.config import Config
     root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
