@@ -28,6 +28,7 @@ def main():
     sock.bind(("127.0.0.1", 0))
     sock.listen(128)
     port = sock.getsockname()[1]
+    app.state.port = port
     # The secret is transmitted to Electron via inherited environment, not a URL or log.
     print(f'WORKPULSE_PORT={port}', flush=True)
     try:
