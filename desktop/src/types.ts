@@ -21,5 +21,7 @@ declare global {interface Window{workpulse:{
  createBackup:(password:string)=>Promise<string|null>;
  restoreBackup:(password:string)=>Promise<{restart_required:boolean}|null>;
  checkUpdates:()=>Promise<{available:boolean;version?:string;message:string}>;
+ getAutoUpdates:()=>Promise<{enabled:boolean;signed:boolean}>;
+ setAutoUpdates:(enabled:boolean)=>Promise<{enabled:boolean;signed:boolean}>;
 }}}
 export {};

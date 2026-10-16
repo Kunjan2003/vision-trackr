@@ -4,7 +4,7 @@ const {randomBytes}=require("node:crypto");
 const {join,resolve}=require("node:path");
 const {existsSync,readFileSync,writeFileSync}=require("node:fs");
 const fs=require("node:fs/promises");
-const {spawn}=require("node:child_process");
+const {spawn,execFileSync}=require("node:child_process");
 const {WebSocket}=require("ws");
 const {autoUpdater}=require("electron-updater");
 if(!app.requestSingleInstanceLock()){app.quit();process.exit(0);}
@@ -89,7 +89,8 @@ function launchBackend(){
 }
 app.on("second-instance",openDashboard);
 app.on("before-quit",()=>{quitting=true;globalShortcut.unregisterAll();clearTimeout(restartTimer);if(socket)socket.close();if(backend)backend.kill();});
-app.whenReady().then(()=>{loadSession();createTray();launchBackend();if(!process.argv.includes("--hidden"))openDashboard();if(token)showWidget();registerGlobalShortcuts();setInterval(()=>void checkFocusCompletion(),30000);app.on("activate",openDashboard);});
+app.whenReady().then(()=>{loadSession();createTray();launchBackend();if(!process.argv.includes("--hidden"))openDashboard();if(token)showWidget();registerGlobalShortcuts();setInterval(()=>void checkFocusCompletion(),30000);
+  setTimeout(()=>void tryAutoUpdate(),120000);setInterval(()=>void tryAutoUpdate(),12*60*60*1000);app.on("activate",openDashboard);});
 ipcMain.handle("api:request",async(_e,{path,method,body})=>{
  if(body&&JSON.stringify(body).length>100000)throw Error("Request too large");
  const result=await callApi(path,method,body);
@@ -191,11 +192,43 @@ ipcMain.handle("backup:restore",async(_event,password)=>{
 });
 // Updates require a Windows Authenticode-signed installer and configured GitHub
 // release metadata. Never install an unsigned update silently.
+const updateSettingsPath=()=>join(app.getPath("userData"),"updates.json");
+function updateEnabled(){
+ try{return JSON.parse(readFileSync(updateSettingsPath(),"utf8")).enabled===true;}catch{return false;}
+}
+function signedInstaller(){
+ if(!app.isPackaged||process.platform!=="win32")return false;
+ try{
+  const path=process.execPath.replace(/'/g,"''");
+  const script="if ((Get-AuthenticodeSignature -LiteralPath '"+path+"').Status -eq 'Valid') {exit 0} else {exit 1}";
+  execFileSync("powershell.exe",["-NoProfile","-NonInteractive","-Command",script],{windowsHide:true,timeout:10000,stdio:"ignore"});
+  return true;
+ }catch{return false;}
+}
+async function tryAutoUpdate(){
+ if(!updateEnabled()||!signedInstaller())return;
+ try{
+  autoUpdater.autoDownload=true;
+  autoUpdater.autoInstallOnAppQuit=true;
+  await autoUpdater.checkForUpdates();
+ }catch{/* No signed release or currently offline. */}
+}
 autoUpdater.autoDownload=false;
 autoUpdater.autoInstallOnAppQuit=false;
+autoUpdater.on("update-downloaded",()=>{
+ if(Notification.isSupported())new Notification({title:"WorkPulse update ready",body:"The signed update will install when you quit WorkPulse."}).show();
+});
+autoUpdater.on("error",()=>{});
+ipcMain.handle("updates:get",()=>({enabled:updateEnabled(),signed:signedInstaller()}));
+ipcMain.handle("updates:set",async(_event,enabled)=>{
+ if(typeof enabled!=="boolean")throw Error("Invalid update setting");
+ await fs.writeFile(updateSettingsPath(),JSON.stringify({enabled}),{mode:0o600});
+ if(enabled)void tryAutoUpdate();
+ return {enabled,signed:signedInstaller()};
+});
 ipcMain.handle("updates:check",async()=>{
- if(!app.isPackaged||process.platform!=="win32")
-  return {available:false,message:"Updates can be checked after installing WorkPulse on Windows."};
+ if(!signedInstaller())
+  return {available:false,message:"Updates require an installed, publisher-signed WorkPulse release. The current development or unsigned installer cannot auto-update."};
  try{
   const release=await autoUpdater.checkForUpdates();
   return {available:Boolean(release?.updateInfo && release.updateInfo.version!==app.getVersion()),

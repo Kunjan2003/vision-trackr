@@ -65,6 +65,8 @@ export default function WorkspaceV2({section,onRefresh}:{section:SuiteSection;on
  const [backupPassword,setBackupPassword]=useState("");
  const [pair,setPair]=useState<{port:number;token:string}|null>(null);
  const [update,setUpdate]=useState("");
+ const [updateEnabled,setUpdateEnabled]=useState(false);
+ const [signedInstaller,setSignedInstaller]=useState(false);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState("");
  const [notice,setNotice]=useState("");
@@ -88,6 +90,7 @@ export default function WorkspaceV2({section,onRefresh}:{section:SuiteSection;on
   }catch(e){setError(errorMsg(e));}
  },[section,month,calendarDay,reportStart,reportEnd]);
  useEffect(()=>{void refresh();},[refresh]);
+ useEffect(()=>{if(section==="backups")void window.workpulse.getAutoUpdates().then(x=>{setUpdateEnabled(x.enabled);setSignedInstaller(x.signed);}).catch(()=>{});},[section]);
  useEffect(()=>{if(section!=="focus")return;const i=setInterval(()=>{setClock(Date.now());void api("/v2/focus").then(setFocus).catch(()=>{});},5000);return ()=>clearInterval(i);},[section]);
  async function run(fn:()=>Promise<unknown>,success:string){
   setBusy(true);setError("");setNotice("");
@@ -201,6 +204,6 @@ export default function WorkspaceV2({section,onRefresh}:{section:SuiteSection;on
 
   {section==="backups"&&<div className="suite-grid"><section className="panel"><LockKeyhole size={30} color="#83eabb"/><h3 className="suite-space">Encrypted backup & restore</h3><p className="muted">Backups are encrypted with AES-256-GCM using a password you provide. Keep the password safely: it cannot be recovered by WorkPulse. Restoring restarts the background tracking service.</p>
     <div className="suite-form"><label>Backup password (12+ characters)<input type="password" autoComplete="new-password" value={backupPassword} onChange={e=>setBackupPassword(e.target.value)} placeholder="Create or enter backup password"/></label><div className="suite-actions"><button disabled={busy||backupPassword.length<12} className="primary" onClick={()=>void run(async()=>{const p=await window.workpulse.createBackup(backupPassword);if(p)setNotice("Backup saved: "+p);},"Encrypted backup exported.")}><Download size={16}/> Export backup</button><button disabled={busy||backupPassword.length<12} className="secondary" onClick={()=>{if(!confirm("Restore a prior database? Current records will be replaced after a tracker restart."))return;void run(async()=>{const result=await window.workpulse.restoreBackup(backupPassword);if(result)setNotice("Restore staged and service restarting.");},"Restore requested.");}}><Archive size={16}/> Restore backup</button></div></div></section>
-   <section className="panel"><RefreshCcw size={30} color="#83eabb"/><h3 className="suite-space">Application updates</h3><p className="muted">WorkPulse checks the official GitHub release feed. Updates must be signed by a trusted publisher before automatic installation is supported. Unsigned builds never silently auto-install upgrades.</p><button className="primary suite-space" disabled={busy} onClick={()=>void run(async()=>{const r=await window.workpulse.checkUpdates();setUpdate(r.message+(r.available?" New release: "+r.version:""));},"Update check completed.")}><RefreshCcw size={16}/> Check for updates</button>{update&&<p className="small-note">{update}</p>}<p className="small-note">Automatic local migration backups are also retained for recent app starts.</p></section></div>}
+   <section className="panel"><RefreshCcw size={30} color="#83eabb"/><h3 className="suite-space">Application updates</h3><p className="muted">WorkPulse checks the official GitHub release feed. Updates must be signed by a trusted publisher before automatic installation is supported. Unsigned builds never silently auto-install upgrades.</p><label className="suite-toggle"><span><strong>Automatically install verified updates</strong><small>Opt in to GitHub release checks every 12 hours. Only enabled for publisher-signed Windows builds.</small></span><input type="checkbox" checked={updateEnabled} onChange={e=>void run(async()=>{const state=await window.workpulse.setAutoUpdates(e.target.checked);setUpdateEnabled(state.enabled);setSignedInstaller(state.signed);},"Update preference saved.")}/></label><p className="small-note">{signedInstaller?"Signed publisher verified.":"Current build is unsigned or running in development mode."}</p><button className="primary suite-space" disabled={busy} onClick={()=>void run(async()=>{const r=await window.workpulse.checkUpdates();setUpdate(r.message+(r.available?" New release: "+r.version:""));},"Update check completed.")}><RefreshCcw size={16}/> Check for updates</button>{update&&<p className="small-note">{update}</p>}<p className="small-note">Automatic local migration backups are also retained for recent app starts.</p></section></div>}
  </div>;
 }

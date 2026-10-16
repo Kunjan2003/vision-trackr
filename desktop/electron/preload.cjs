@@ -13,5 +13,7 @@ contextBridge.exposeInMainWorld("workpulse",{
  importCalendar:()=>ipcRenderer.invoke("calendar:import"),
  createBackup:password=>ipcRenderer.invoke("backup:create",password),
  restoreBackup:password=>ipcRenderer.invoke("backup:restore",password),
- checkUpdates:()=>ipcRenderer.invoke("updates:check")
+ checkUpdates:()=>ipcRenderer.invoke("updates:check"),
+ getAutoUpdates:()=>ipcRenderer.invoke("updates:get"),
+ setAutoUpdates:enabled=>ipcRenderer.invoke("updates:set",enabled)
 });
