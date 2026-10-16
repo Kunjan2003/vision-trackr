@@ -1,3 +1,4 @@
+import type React from "react";
 import {useCallback,useEffect,useState} from "react";
 import {Activity,BarChart3,CalendarDays,Check,ChevronDown,Clock3,Coffee,Download,LayoutDashboard,LogOut,Pause,Play,Plus,Settings2,ShieldCheck,Square,Tag,Timer,Trash2,TrendingUp,Monitor} from "lucide-react";
 import {ResponsiveContainer,BarChart,Bar,CartesianGrid,XAxis,YAxis,Tooltip,LineChart,Line,PieChart,Pie,Cell} from "recharts";
