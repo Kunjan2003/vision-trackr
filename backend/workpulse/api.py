@@ -70,7 +70,7 @@ def session_state(db: Session, user_id: int):
     s = db.scalar(select(WorkSession).where(WorkSession.user_id == user_id).order_by(WorkSession.id.desc()))
     return {"break_seconds": max(0, (datetime.utcnow() - (s.state_since or s.started_at)).total_seconds()) if s and s.finished_at is None and s.status == "break" else 0,
             "status": s.status if s and s.finished_at is None else "finished",
-            "started_at": s.started_at.isoformat()+"Z" if s and s.finished_at is None else None,
+            "started_at": (s.started_at.astimezone(__import__("datetime").timezone.utc).replace(tzinfo=None) if s.started_at.tzinfo else s.started_at).isoformat()+"Z" if s and s.finished_at is None else None,
             "session_id": s.id if s and s.finished_at is None else None}
 
 @app.post("/session/{action}")
