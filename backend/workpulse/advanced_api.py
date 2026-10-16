@@ -24,7 +24,7 @@ from .enhancements import retention_cleanup
 router=APIRouter(prefix="/v2",tags=["WorkPulse v2"])
 
 def as_dict(obj, fields):
-    return {field: (getattr(obj,field).isoformat()+"Z" if isinstance(getattr(obj,field),datetime) else getattr(obj,field)) for field in fields}
+    return {field: ((getattr(obj,field).astimezone(timezone.utc).replace(tzinfo=None) if getattr(obj,field).tzinfo else getattr(obj,field)).isoformat()+"Z" if isinstance(getattr(obj,field),datetime) else getattr(obj,field)) for field in fields}
 
 def owned(db, model, object_id, user_id):
     row=db.get(model,object_id)
