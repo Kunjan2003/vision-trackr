@@ -245,3 +245,6 @@ def export(format: Literal["csv", "pdf"] = "csv", day: date = Query(default_fact
 # All v2 routes use the same local capability and user authentication.
 from .advanced_api import router as advanced_router
 app.include_router(advanced_router)
+
+from .browser_bridge import router as browser_router
+app.include_router(browser_router)
