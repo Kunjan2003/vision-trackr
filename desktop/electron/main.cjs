@@ -5,6 +5,7 @@ const {join,resolve}=require("node:path");
 const {existsSync,readFileSync,writeFileSync}=require("node:fs");
 const fs=require("node:fs/promises");
 const {spawn}=require("node:child_process");
+const {WebSocket}=require("ws");
 if(!app.requestSingleInstanceLock()){app.quit();process.exit(0);}
 let dashboard,widget,tray,backend,socket;
 let port=null,token=null,quitting=false,restartTimer=null;
@@ -88,7 +89,7 @@ app.whenReady().then(()=>{loadSession();createTray();launchBackend();if(!process
 ipcMain.handle("api:request",async(_e,{path,method,body})=>{
  if(body&&JSON.stringify(body).length>100000)throw Error("Request too large");
  const result=await callApi(path,method,body);
- if(path==="/auth/login"||path==="/auth/register"){persistSession(result.token);connectLive();showWidget();setAutoStart(true);return {user:result.user};}
+ if(path==="/auth/login"||path==="/auth/register"){persistSession(result.token);connectLive();showWidget();try{const s=await callApi("/settings");setAutoStart(s.auto_start);}catch{}return {user:result.user};}
  return result;
 });
 ipcMain.handle("api:export",async(_e,{format,day,tz})=>{
