@@ -41,3 +41,22 @@ def test_registration_and_authenticated_routes():
 
 def test_login_rejects_wrong_password():
     assert client.post("/auth/login",headers=HEADERS,json={"email":"alice@example.com","password":"bad"}).status_code == 401
+
+def test_websocket_live_and_multiple_sessions():
+    auth_response = client.post("/auth/login", headers=HEADERS, json={
+        "email":"alice@example.com", "password":"StrongPassword123!"
+    })
+    assert auth_response.status_code == 200
+    token = auth_response.json()["token"]
+    authenticated = {**HEADERS, "Authorization":"Bearer "+token}
+    assert client.post("/session/start", headers=authenticated).status_code == 200
+    with client.websocket_connect("/ws/live") as ws:
+        ws.send_json({"agent":"test-only-agent-token","token":token})
+        data = ws.receive_json()
+        assert data["status"] == "working"
+        assert data["today"]["work"] >= 0
+    assert client.post("/session/break",headers=authenticated).json()["status"] == "break"
+    assert client.get("/activity/live",headers=authenticated).json()["break_seconds"] >= 0
+    assert client.post("/session/finish",headers=authenticated).json()["status"] == "finished"
+    assert client.post("/session/start",headers=authenticated).json()["status"] == "working"
+    assert client.post("/session/finish",headers=authenticated).json()["status"] == "finished"

@@ -1,5 +1,6 @@
 """Local-only credentials: application capability plus per-user JWT."""
 import hmac
+import hashlib
 import os
 import secrets
 import time
@@ -28,10 +29,16 @@ CAPABILITY = os.getenv("WORKPULSE_AGENT_TOKEN") or secrets.token_urlsafe(48)
 LOGIN_ATTEMPTS: dict[str, list[float]] = {}
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()
+    prehash = hashlib.sha256(password.encode("utf-8")).digest()
+    return "sha256:" + bcrypt.hashpw(prehash, bcrypt.gensalt(rounds=12)).decode()
 
 def verify_password(password: str, hashed: str) -> bool:
-    return bcrypt.checkpw(password.encode(), hashed.encode())
+    if hashed.startswith("sha256:"):
+        return bcrypt.checkpw(hashlib.sha256(password.encode("utf-8")).digest(), hashed[7:].encode())
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), hashed.encode())
+    except ValueError:
+        return False
 
 def issue_token(user: User) -> str:
     return jwt.encode({"sub": str(user.id), "exp": datetime.now(timezone.utc) + timedelta(days=30)}, jwt_secret(), algorithm="HS256")

@@ -47,6 +47,49 @@ jobs:
         run: |
           python -m PyInstaller --noconfirm --clean --onefile --name workpulse-backend --paths backend --distpath backend/dist --workpath backend/build --add-data "backend/alembic.ini;." --add-data "backend/alembic;alembic" --collect-submodules uvicorn --collect-submodules sqlalchemy.dialects.sqlite --hidden-import win32timezone backend/run_backend.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Smoke test bundled Python service
+        shell: pwsh
+        run: |
+          $env:WORKPULSE_DATA_DIR = Join-Path $env:RUNNER_TEMP ("workpulse-" + [guid]::NewGuid().ToString())
+          $env:WORKPULSE_AGENT_TOKEN = "ci-only-test-agent-0123456789-0123456789"
+          New-Item -Type Directory -Path $env:WORKPULSE_DATA_DIR -Force | Out-Null
+          $stdout = Join-Path $env:RUNNER_TEMP "workpulse-out.txt"
+          $stderr = Join-Path $env:RUNNER_TEMP "workpulse-error.txt"
+          $exe = (Resolve-Path "backend/dist/workpulse-backend.exe").Path
+          $process = Start-Process -FilePath $exe -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          try {
+            $port = $null
+            for ($i = 0; $i -lt 120; $i++) {
+              Start-Sleep -Milliseconds 500
+              $match = Select-String -Path $stdout -Pattern '^WORKPULSE_PORT=(\d+)
+        working-directory: desktop
+        run: npm run build:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WorkPulse-Windows-Installer
+          path: desktop/release/WorkPulse-Setup.exe
+          if-no-files-found: error
+          retention-days: 14
+ | Select-Object -First 1
+              if ($match) { $port = $match.Matches[0].Groups[1].Value; break }
+              if ($process.HasExited) { throw "Backend exited: $(Get-Content $stderr -Raw)" }
+            }
+            if (!$port) { throw "Backend did not bind a port: $(Get-Content $stderr -Raw)" }
+            $headers = @{ "X-Agent-Token" = $env:WORKPULSE_AGENT_TOKEN }
+            $success = $false
+            for ($i=0; $i -lt 30; $i++) {
+              try {
+                $health = Invoke-RestMethod -Uri ("http://127.0.0.1:" + $port + "/health") -Headers $headers -TimeoutSec 2
+                if ($health.ok) { $success = $true; break }
+              } catch { Start-Sleep -Milliseconds 500 }
+            }
+            if (!$success) { throw "Bundled backend health check failed" }
+            $status = Invoke-RestMethod -Uri ("http://127.0.0.1:" + $port + "/auth/status") -Headers $headers
+            if ($status.registered) { throw "Expected empty local account database" }
+            Write-Host "PyInstaller service starts and answers authenticated HTTP requests"
+          } finally {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          }
       - name: Install UI packages
         working-directory: desktop
         run: npm install --no-audit --no-fund

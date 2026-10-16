@@ -161,3 +161,5 @@ td:first-child{font-weight:700}
 .widget-pill .icon-action{margin-left:auto;color:#edf8ff}
 @media(max-width:1150px){.sidebar{width:220px}.content{padding:26px 23px}.topbar{padding:0 23px}.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.charts-grid{grid-template-columns:1fr}.donut-layout{justify-content:flex-start;gap:35px}}
 @media(max-width:800px){.sidebar{width:72px;padding:22px 10px}.sidebar .brand span,.sidebar-title,.nav-link:not(.selected),.privacy-chip,.account-name,.account>svg{display:none}.sidebar .brand{margin:0 5px 40px}.nav-link{font-size:0;justify-content:center;padding:12px}.account{justify-content:center}.top-right{gap:9px}.date-filter input{width:126px}.auth-layout{grid-template-columns:1fr}.auth-intro{display:none}.auth-card{padding:55px 32px}}
+
+.session-toolbar{display:flex;gap:7px;align-items:center}.session-toolbar button{display:flex;gap:6px;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:8px;padding:7px 10px;background:var(--panel);color:var(--text);font-size:11px;font-weight:700}.session-toolbar button:hover{border-color:var(--accent)}
