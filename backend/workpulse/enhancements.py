@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from .models import ActiveAssignment, CalendarMeeting, PrivacyRule, PrivacySettings, ProjectRule, WorkTask
+from .models import ActiveAssignment, CalendarMeeting, PrivacyRule, PrivacySettings, ProjectRule, WorkTask, Project
 from .windows import Foreground
 
 BROWSERS={"chrome.exe","msedge.exe","firefox.exe","brave.exe","opera.exe","vivaldi.exe"}
@@ -53,12 +53,18 @@ def capture_policy(db:Session,user_id:int,fg:Foreground,now:datetime)->CapturePo
     if not project_id:
         rules=db.scalars(select(ProjectRule).where(ProjectRule.user_id==user_id)).all()
         for rule in sorted(rules,key=lambda r:len(r.pattern),reverse=True):
-            if rule.pattern.lower() in full:
+            p=db.get(Project,rule.project_id)
+            if p and not p.archived and rule.pattern.lower() in full:
                 project_id=rule.project_id
                 break
-    # A project can be selected automatically; tasks are only pinned explicitly.
     if not project_id:
         task_id=None
+    elif not task_id:
+        possible=db.scalars(select(WorkTask).where(WorkTask.user_id==user_id,WorkTask.project_id==project_id)).all()
+        for task in sorted(possible,key=lambda t:len(t.name),reverse=True):
+            if len(task.name)>=4 and task.name.lower() in full:
+                task_id=task.id
+                break
     meeting=False
     if settings and settings.meeting_opt_in:
         meeting=bool(db.scalar(select(CalendarMeeting.id).where(

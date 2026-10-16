@@ -329,9 +329,9 @@ def project_analytics(start:date=Query(default_factory=lambda:date.today()-timed
     manual=db.scalars(select(ManualEntry).where(ManualEntry.user_id==user.id,ManualEntry.started_at<right,ManualEntry.ended_at>left,ManualEntry.project_id.is_not(None))).all()
     seconds=defaultdict(float)
     for row in tracked:
-        if row.state!="break":seconds[row.project_id]+=max(0,(min(right,row.ended_at)-max(left,row.started_at)).total_seconds())
+        if row.state in ("productive","neutral"):seconds[row.project_id]+=max(0,(min(right,row.ended_at)-max(left,row.started_at)).total_seconds())
     for row in manual:
-        if row.state!="break":seconds[row.project_id]+=max(0,(min(right,row.ended_at)-max(left,row.started_at)).total_seconds())
+        if row.state in ("productive","neutral"):seconds[row.project_id]+=max(0,(min(right,row.ended_at)-max(left,row.started_at)).total_seconds())
     projects=db.scalars(select(Project).where(Project.user_id==user.id)).all()
     return [{"id":p.id,"name":p.name,"client":p.client,"hours":round(seconds[p.id]/3600,2),
              "hourly_rate":p.hourly_rate,"billable":round(seconds[p.id]/3600*p.hourly_rate,2),
