@@ -1,5 +1,5 @@
 "use strict";
-const {app,BrowserWindow,Tray,Menu,Notification,globalShortcut,ipcMain,dialog,safeStorage,nativeImage}=require("electron");
+const {app,BrowserWindow,Tray,Menu,Notification,globalShortcut,shell,ipcMain,dialog,safeStorage,nativeImage}=require("electron");
 const {randomBytes}=require("node:crypto");
 const {join,resolve}=require("node:path");
 const {existsSync,readFileSync,writeFileSync}=require("node:fs");
@@ -238,3 +238,5 @@ ipcMain.handle("updates:check",async()=>{
   return {available:false,message:"No published, signed WorkPulse update feed is currently available."};
  }
 });
+
+ipcMain.handle("browser:show-extension",async()=>{const path=app.isPackaged?join(process.resourcesPath,"browser-extension","manifest.json"):resolve(__dirname,"../../browser-extension/manifest.json");if(!existsSync(path))throw Error("Browser extension directory not found");shell.showItemInFolder(path);return true;});

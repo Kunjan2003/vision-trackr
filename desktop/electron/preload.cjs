@@ -15,5 +15,6 @@ contextBridge.exposeInMainWorld("workpulse",{
  restoreBackup:password=>ipcRenderer.invoke("backup:restore",password),
  checkUpdates:()=>ipcRenderer.invoke("updates:check"),
  getAutoUpdates:()=>ipcRenderer.invoke("updates:get"),
- setAutoUpdates:enabled=>ipcRenderer.invoke("updates:set",enabled)
+ setAutoUpdates:enabled=>ipcRenderer.invoke("updates:set",enabled),
+ showBrowserExtension:()=>ipcRenderer.invoke("browser:show-extension")
 });

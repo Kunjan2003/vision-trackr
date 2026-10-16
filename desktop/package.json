@@ -45,6 +45,10 @@
       {
         "from": "../backend/dist/workpulse-backend.exe",
         "to": "bin/workpulse-backend.exe"
+      },
+      {
+        "from": "../browser-extension",
+        "to": "browser-extension"
       }
     ],
     "win": {

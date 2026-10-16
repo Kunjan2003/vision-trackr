@@ -23,5 +23,6 @@ declare global {interface Window{workpulse:{
  checkUpdates:()=>Promise<{available:boolean;version?:string;message:string}>;
  getAutoUpdates:()=>Promise<{enabled:boolean;signed:boolean}>;
  setAutoUpdates:(enabled:boolean)=>Promise<{enabled:boolean;signed:boolean}>;
+ showBrowserExtension:()=>Promise<boolean>;
 }}}
 export {};
