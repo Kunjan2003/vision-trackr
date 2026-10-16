@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import select
 from apscheduler.schedulers.background import BackgroundScheduler
 from .db import SessionLocal
-from .models import UserSettings, WorkSession
+from .models import UserSettings, WorkSession, FocusBlock
 from .tracker import Tracker
 from .windows import observe
 
@@ -14,6 +14,7 @@ tracker=Tracker()
 wake=threading.Event()
 stopping=threading.Event()
 last_state="finished"
+distraction_polls=0
 foreground={"app_name":"","title":""}
 reminder=None
 _latest_user=None
@@ -26,7 +27,7 @@ def set_user(user_id):
     wake.set()
 
 def run():
-    global last_state,foreground
+    global last_state,foreground,reminder,distraction_polls
     while not stopping.is_set():
         poll=4
         user_id=_latest_user
@@ -38,8 +39,19 @@ def run():
                     opened=db.scalar(select(WorkSession).where(WorkSession.user_id==user_id,WorkSession.finished_at.is_(None)).order_by(WorkSession.id.desc()))
                     if opened:
                         fg=observe()
-                        foreground={"app_name":fg.app_name,"title":fg.title}
+                        foreground={"app_name":fg.app_name,"title":""}
                         last_state=tracker.tick(db,user_id,fg)
+                        if last_state=="non_productive":
+                            distraction_polls+=1
+                        else:
+                            distraction_polls=0
+                        if distraction_polls==3:
+                            focus=db.scalar(select(FocusBlock).where(
+                                FocusBlock.user_id==user_id,FocusBlock.status=="running"
+                            ).order_by(FocusBlock.id.desc()))
+                            if focus and datetime.utcnow()<focus.started_at+__import__("datetime").timedelta(minutes=focus.duration_minutes):
+                                reminder={"id":"focus-distraction-"+str(focus.id)+"-"+str(int(datetime.utcnow().timestamp()//300)),
+                                          "message":"You opened a distracting app during a focus block. Return to your chosen task when ready."}
                         db.commit()
                     else:last_state,foreground="finished",{"app_name":"","title":""}
             except Exception:logger.exception("Tracking poll failed")
@@ -70,6 +82,7 @@ def launch():
     t.start()
     _scheduler=BackgroundScheduler(daemon=True,timezone="UTC")
     _scheduler.add_job(check_break_reminder,"interval",seconds=60,max_instances=1,coalesce=True,id="reminder")
+    _scheduler.add_job(clean_old_activity,"interval",hours=24,max_instances=1,coalesce=True,id="retention")
     _scheduler.start()
     return t
 
@@ -82,3 +95,17 @@ def restore_user_session():
     with SessionLocal() as db:
         s=db.scalar(select(WorkSession).where(WorkSession.finished_at.is_(None)).order_by(WorkSession.id.desc()))
         if s:set_user(s.user_id)
+
+
+def clean_old_activity():
+    """Enforce user-selected local data retention daily."""
+    from .models import User
+    from .enhancements import retention_cleanup
+    try:
+        with tracker.lock:
+            with SessionLocal() as db:
+                for user_id in db.scalars(select(User.id)):
+                    retention_cleanup(db,user_id)
+                db.commit()
+    except Exception:
+        logger.exception("Data retention cleanup failed")

@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from . import agent
 from .db import SessionLocal
-from .models import ActivitySlice, CategoryRule, User, UserSettings, WorkSession
+from .models import ActivitySlice, CategoryRule, User, UserSettings, WorkSession, IdleReview
 from .schemas import Login, Register, RuleInput, SettingsPatch
 from .security import CAPABILITY, current_user, get_db, hash_password, issue_token, throttle, verify_capability, verify_password
 from .stats import bounds, clipped, day_stats, period_stats, slices_for
@@ -70,7 +70,7 @@ def session_state(db: Session, user_id: int):
     s = db.scalar(select(WorkSession).where(WorkSession.user_id == user_id).order_by(WorkSession.id.desc()))
     return {"break_seconds": max(0, (datetime.utcnow() - (s.state_since or s.started_at)).total_seconds()) if s and s.finished_at is None and s.status == "break" else 0,
             "status": s.status if s and s.finished_at is None else "finished",
-            "started_at": s.started_at.isoformat()+"Z" if s and s.finished_at is None else None,
+            "started_at": (s.started_at.astimezone(__import__("datetime").timezone.utc).replace(tzinfo=None) if s.started_at.tzinfo else s.started_at).isoformat()+"Z" if s and s.finished_at is None else None,
             "session_id": s.id if s and s.finished_at is None else None}
 
 @app.post("/session/{action}")
@@ -114,14 +114,14 @@ async def live_socket(ws: WebSocket):
                 if s:
                     age = max(0.0, min(8.0, (datetime.utcnow() - s.last_tick_at).total_seconds()))
                     which = "break" if s.status == "break" else agent.last_state
-                    if which not in ("productive", "neutral", "non_productive", "idle", "break"):
-                        which = "neutral"
-                    state["today"][which] += age
-                    if which != "break":
-                        state["today"]["work"] += age
+                    if which in ("productive", "neutral", "non_productive", "idle", "break"):
+                        state["today"][which] += age
+                        if which != "break":
+                            state["today"]["work"] += age
                     t = state["today"]
                     t["productivity"] = round(100*t["productive"]/t["work"], 1) if t["work"] else 0.0
                 state["reminder"] = agent.reminder
+                state["idle_pending"] = db.scalar(select(func.count(IdleReview.id)).where(IdleReview.user_id==user_id,IdleReview.resolved==False)) or 0
             await ws.send_json(state)
             await asyncio.sleep(1)
     except (WebSocketDisconnect, asyncio.TimeoutError, ValueError, KeyError):
@@ -241,3 +241,18 @@ def export(format: Literal["csv", "pdf"] = "csv", day: date = Query(default_fact
     page.save(); buf.seek(0)
     return StreamingResponse(buf,media_type="application/pdf",
                              headers={"Content-Disposition":f'attachment; filename="workpulse-{day}.pdf"'})
+
+# All v2 routes use the same local capability and user authentication.
+from .advanced_api import router as advanced_router
+app.include_router(advanced_router)
+
+from .browser_bridge import router as browser_router
+app.include_router(browser_router)
+
+from .backup import router as backup_router
+app.include_router(backup_router)
+from .calendar_api import router as calendar_router
+app.include_router(calendar_router)
+
+from .report_api import router as reporting_router
+app.include_router(reporting_router)

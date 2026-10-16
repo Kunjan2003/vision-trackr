@@ -1,0 +1,60 @@
+name: Publish signed WorkPulse update
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  signed-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Require code-signing configuration
+        shell: pwsh
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          WIN_PUBLISHER_NAME: ${{ secrets.WIN_PUBLISHER_NAME }}
+        run: |
+          if (!$env:CSC_LINK -or !$env:CSC_KEY_PASSWORD -or !$env:WIN_PUBLISHER_NAME) {
+            throw "Configure CSC_LINK, CSC_KEY_PASSWORD and WIN_PUBLISHER_NAME before publishing signed releases."
+          }
+      - name: Build Python agent and test
+        shell: pwsh
+        run: |
+          python -m pip install -r backend/requirements.txt pillow
+          $env:PYTHONPATH = "backend"
+          python -m pytest -q backend/tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/make_icons.py
+          python -m PyInstaller --noconfirm --clean --onefile --name workpulse-backend --paths backend --distpath backend/dist --workpath backend/build --add-data "backend/alembic.ini;." --add-data "backend/alembic;alembic" --collect-submodules uvicorn --collect-submodules sqlalchemy.dialects.sqlite --hidden-import win32timezone backend/run_backend.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Sign and publish NSIS installer
+        working-directory: desktop
+        shell: pwsh
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          WIN_PUBLISHER_NAME: ${{ secrets.WIN_PUBLISHER_NAME }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm install --no-audit --no-fund
+          npm run build:ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npx electron-builder --win nsis --publish always --config.win.publisherName="$env:WIN_PUBLISHER_NAME"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $signature = Get-AuthenticodeSignature -FilePath "release/WorkPulse-Setup.exe"
+          if ($signature.Status -ne "Valid") { throw "Signed release validation failed" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WorkPulse-Signed-Release
+          path: |
+            desktop/release/WorkPulse-Setup.exe
+            desktop/release/latest.yml
+          retention-days: 30

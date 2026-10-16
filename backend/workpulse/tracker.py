@@ -3,7 +3,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from .models import ActivitySlice, CategoryRule, UserSettings, WorkSession
+from .models import ActivitySlice, CategoryRule, UserSettings, WorkSession, IdleReview
 from .windows import Foreground
 
 DEFAULT_RULES = [
@@ -97,28 +97,43 @@ class Tracker:
             if not settings:
                 seed_user(db, user_id)
                 settings = db.get(UserSettings, user_id)
+            from .enhancements import capture_policy
+            policy = capture_policy(db, user_id, fg, now)
             previous = naive_utc(s.last_tick_at)
             gap = (now - previous).total_seconds()
-            state = ("break" if s.status == "break" else "idle" if fg.locked or fg.idle_seconds >= settings.idle_threshold else classify(db, user_id, fg))
+            if policy.skip:
+                s.last_tick_at = now
+                db.flush()
+                return "private"
+            foreground = policy.foreground
+            classified = classify(db, user_id, policy.original or fg)
+            # A calendar event is an opt-in suggestion; user category rules win.
+            if policy.meeting and classified == "neutral":
+                classified = "productive"
+            state = ("break" if s.status == "break" else "idle" if fg.locked or fg.idle_seconds >= settings.idle_threshold else classified)
             # Discard long, unknown intervals caused by sleep / shutdown / crash.
             if gap <= 0 or gap > max(30, settings.poll_interval * 3):
                 s.last_tick_at = now
                 return state
+            last = db.scalar(select(ActivitySlice).where(ActivitySlice.session_id == s.id).order_by(ActivitySlice.id.desc()).limit(1))
+            idle_to_review = last if last and last.state == "idle" and last.duration >= 60 and state not in ("idle", "break") else None
             for left, right in split_midnight(previous, now):
-                self._record(db, s, left, right, state, fg)
+                self._record(db, s, left, right, state, foreground, policy.project_id, policy.task_id)
+            if idle_to_review and not db.scalar(select(IdleReview.id).where(IdleReview.slice_id == idle_to_review.id)):
+                db.add(IdleReview(user_id=user_id, slice_id=idle_to_review.id))
             s.last_tick_at = now
             db.flush()
             return state
 
     @staticmethod
-    def _record(db: Session, session: WorkSession, start: datetime, end: datetime, state: str, fg: Foreground):
+    def _record(db: Session, session: WorkSession, start: datetime, end: datetime, state: str, fg: Foreground, project_id: int | None = None, task_id: int | None = None):
         app = fg.app_name if state not in ("break", "idle") else ""
         title = fg.title if state not in ("break", "idle") else ""
         last = db.scalar(select(ActivitySlice).where(ActivitySlice.session_id == session.id).order_by(ActivitySlice.id.desc()).limit(1))
         secs = (end - start).total_seconds()
         # Coalesce adjacent identical intervals, limiting DB growth.
-        if last and last.state == state and last.app_name == app and last.window_title == title and (start - naive_utc(last.ended_at)).total_seconds() <= 1 and last.started_at.date() == start.date():
+        if last and last.state == state and last.app_name == app and last.window_title == title and last.project_id == project_id and last.task_id == task_id and (start - naive_utc(last.ended_at)).total_seconds() <= 1 and last.started_at.date() == start.date():
             last.ended_at = end
             last.duration += secs
         else:
-            db.add(ActivitySlice(session_id=session.id, user_id=session.user_id, started_at=start, ended_at=end, duration=secs, state=state, category=state if state not in ("idle", "break") else "neutral", app_name=app, window_title=title))
+            db.add(ActivitySlice(session_id=session.id, user_id=session.user_id, started_at=start, ended_at=end, duration=secs, state=state, category=state if state not in ("idle", "break") else "neutral", app_name=app, window_title=title, project_id=project_id, task_id=task_id))

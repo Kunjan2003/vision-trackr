@@ -9,7 +9,7 @@ export default function Widget(){
  useEffect(()=>window.workpulse.onLive(setLive),[]);
  const isBreak=live?.status==="break";
  const finished=live?.status==="finished";
- const label=finished?"Finished":isBreak?"On break":live?.state==="idle"?"Idle":"Working";
+ const label=finished?"Finished":isBreak?"On break":live?.state==="private"?"Private pause":live?.state==="idle"?"Idle":"Working";
  const timer=isBreak?(live?.break_seconds||0):(live?.today?.work||0);
  async function change(action:string){
   if(action==="finish"&&!window.confirm("Finish your workday? Your activity will be saved."))return;
