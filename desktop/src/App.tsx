@@ -1,11 +1,12 @@
+import WorkspaceV2, {type SuiteSection} from "./WorkspaceV2";
 import type React from "react";
 import {useCallback,useEffect,useState} from "react";
-import {Activity,BarChart3,CalendarDays,Check,ChevronDown,Clock3,Coffee,Download,LayoutDashboard,LogOut,Pause,Play,Plus,Settings2,ShieldCheck,Square,Tag,Timer,Trash2,TrendingUp,Monitor} from "lucide-react";
+import {Activity,BarChart3,CalendarDays,Check,ChevronDown,Clock3,Coffee,Download,LayoutDashboard,LogOut,Pause,Play,Plus,Settings2,ShieldCheck,Square,Tag,Timer,Trash2,TrendingUp,Monitor,FolderKanban,Target,CalendarCheck,BrainCircuit,Globe2,FileBarChart,DatabaseBackup} from "lucide-react";
 import {ResponsiveContainer,BarChart,Bar,CartesianGrid,XAxis,YAxis,Tooltip,LineChart,Line,PieChart,Pie,Cell} from "recharts";
 import type {Day,Live,Period,Rule,Settings,State,Totals,User} from "./types";
 import {duration,display,hours,localDay,offset} from "./utils";
 
-type View="overview"|"activity"|"categories"|"settings";
+type View="overview"|"activity"|"categories"|"settings"|SuiteSection;
 type Range="today"|"week"|"month";
 const colors:Record<State,string>={productive:"#80e1b4",neutral:"#7b92b7",non_productive:"#fa9c80",idle:"#c2a4e6",break:"#efc873"};
 const states:State[]=["productive","neutral","non_productive","idle","break"];
@@ -138,7 +139,7 @@ export default function App(){
  return <div className="app-shell"><aside className="sidebar"><Brand/><div className="sidebar-title">WORKSPACE</div>
   <nav className="nav-menu">{([
    ["overview",LayoutDashboard,"Overview"],["activity",Clock3,"Activity timeline"],
-   ["categories",Tag,"App categories"],["settings",Settings2,"Settings"]
+   ["categories",Tag,"App categories"],["projects",FolderKanban,"Projects & tasks"],["focus",Target,"Focus mode"],["attendance",CalendarCheck,"Attendance"],["insights",BrainCircuit,"Productivity coach"],["privacy",ShieldCheck,"Privacy & recovery"],["calendar",CalendarDays,"Calendar meetings"],["reports",FileBarChart,"Advanced reports"],["browser",Globe2,"Website integration"],["backups",DatabaseBackup,"Backup & updates"],["settings",Settings2,"Settings"]
   ] as const).map(([id,Icon,label])=><button key={id} className={"nav-link "+(view===id?"selected":"")} onClick={()=>setView(id)}><Icon size={19}/>{label}</button>)}</nav>
   <div className="sidebar-bottom"><div className="privacy-chip"><ShieldCheck size={16}/><span>Private & local<br/><small>Data never leaves this PC</small></span></div><button className="account" onClick={signout}><span className="avatar">{profile.full_name.slice(0,1).toUpperCase()}</span><span className="account-name"><strong>{profile.full_name}</strong><small>{profile.department||profile.email}</small></span><LogOut size={17}/></button></div>
  </aside><main className="main-content">
@@ -169,6 +170,7 @@ export default function App(){
     <div className="settings-row"><div><strong>Daily work goal</strong><p>Your desired work hours each day.</p></div><select value={settings.daily_goal_minutes} onChange={e=>saveSettings({daily_goal_minutes:Number(e.target.value)})}>{[240,300,360,420,480,540,600].map(x=><option key={x} value={x}>{x/60} hours</option>)}</select></div>
     <div className="settings-row"><div><strong>Appearance</strong><p>Switch between light and dark dashboards.</p></div><select value={settings.theme} onChange={e=>saveSettings({theme:e.target.value as Settings["theme"]})}><option value="dark">Dark</option><option value="light">Light</option></select></div>
    </section><section className="panel privacy-settings"><ShieldCheck size={22}/><div><h3>Privacy first</h3><p>All activity data is stored in a local SQLite database under your Windows user profile. WorkPulse never uploads browsing history, captures screenshots, or logs what you type. Window titles may reveal document names; edit or disable any classification rule at any time.</p></div></section></>}
+   {(["projects","focus","attendance","insights","privacy","calendar","reports","browser","backups"] as const).includes(view as SuiteSection)&&<WorkspaceV2 section={view as SuiteSection} onRefresh={()=>void loadData()}/>}
   </div>
  </main></div>;
 }
