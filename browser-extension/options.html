@@ -1,0 +1,8 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WorkPulse pairing</title><style>
+body{font:14px system-ui,sans-serif;width:330px;padding:20px;background:#101d2b;color:#eff6fc}
+label{display:block;margin:16px 0 6px;font-weight:700}input{box-sizing:border-box;width:100%;padding:9px;background:#24364b;color:white;border:1px solid #445971;border-radius:7px}button{background:#80e8b2;color:#0b2830;border:0;border-radius:8px;padding:11px 16px;margin-top:14px;cursor:pointer;font-weight:700}.muted{color:#a1b8ca;line-height:1.5;font-size:12px}#status{margin-top:15px}
+</style></head><body><h2>WorkPulse Domain Bridge</h2><p class="muted">This extension sends only the active website hostname to your paired desktop tracker. It does not collect URL paths, passwords or page contents.</p>
+<label>WorkPulse port<input id="port" type="number" min="1024" max="65535" required></label>
+<label>Browser pairing token<input id="token" type="password" required autocomplete="off"></label>
+<label><input id="enabled" type="checkbox" style="width:auto"> Enable domain tracking</label>
+<button id="save">Save pairing</button><p class="muted" id="status" role="status"></p><script src="options.js"></script></body></html>
