@@ -62,8 +62,7 @@ function showWidget(){
  widget.show();
 }
 function createTray(){
- const png="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jNz0AAAAASUVORK5CYII=";
- const icon=nativeImage.createFromDataURL("data:image/png;base64,"+png).resize({width:16,height:16});
+ const icon=nativeImage.createFromPath(join(__dirname,"../assets/tray.png"));
  tray=new Tray(icon);tray.setToolTip("WorkPulse");
  tray.setContextMenu(Menu.buildFromTemplate([{label:"Dashboard",click:openDashboard},{label:"Floating timer",click:showWidget},{type:"separator"},{label:"Quit WorkPulse",click:()=>{quitting=true;app.quit();}}]));
  tray.on("double-click",openDashboard);
