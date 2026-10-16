@@ -3,7 +3,7 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from .models import ActivitySlice
+from .models import ActivitySlice, ManualEntry
 
 STATES = ("productive", "neutral", "non_productive", "idle", "break")
 
@@ -52,6 +52,28 @@ def day_stats(db: Session, user_id: int, day: date, offset: int):
             part_end = min(next_hour, right)
             hourly[local_hour][row.state] += round((part_end-cursor).total_seconds(), 1)
             cursor = part_end
+    manual = db.scalars(select(ManualEntry).where(
+        ManualEntry.user_id == user_id,
+        ManualEntry.ended_at > start, ManualEntry.started_at < end
+    ).order_by(ManualEntry.started_at)).all()
+    for entry in manual:
+        left, right = max(entry.started_at,start), min(entry.ended_at,end)
+        secs = (right-left).total_seconds()
+        if secs <= 0:
+            continue
+        seconds[entry.state] += secs
+        timeline.append({"start":left.isoformat()+"Z","end":right.isoformat()+"Z",
+                         "state":entry.state,"app_name":"Manual entry",
+                         "title":entry.note,"seconds":round(secs,1),"manual":True})
+        cursor=left
+        while cursor<right:
+            local_hour=(cursor-timedelta(minutes=offset)).hour
+            boundary=(cursor-timedelta(minutes=offset)).replace(
+                minute=0,second=0,microsecond=0)+timedelta(hours=1,minutes=offset)
+            stop=min(boundary,right)
+            hourly[local_hour][entry.state]+=round((stop-cursor).total_seconds(),1)
+            cursor=stop
+    timeline.sort(key=lambda item:item["start"])
     return {"date": day.isoformat(), "totals": totals_from(seconds),
             "apps": sorted(({"app_name": k, **v} for k,v in apps.items()), key=lambda x: -x["seconds"])[:30],
             "timeline": timeline, "hourly": hourly}

@@ -241,3 +241,7 @@ def export(format: Literal["csv", "pdf"] = "csv", day: date = Query(default_fact
     page.save(); buf.seek(0)
     return StreamingResponse(buf,media_type="application/pdf",
                              headers={"Content-Disposition":f'attachment; filename="workpulse-{day}.pdf"'})
+
+# All v2 routes use the same local capability and user authentication.
+from .advanced_api import router as advanced_router
+app.include_router(advanced_router)

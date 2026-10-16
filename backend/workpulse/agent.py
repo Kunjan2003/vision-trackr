@@ -70,6 +70,7 @@ def launch():
     t.start()
     _scheduler=BackgroundScheduler(daemon=True,timezone="UTC")
     _scheduler.add_job(check_break_reminder,"interval",seconds=60,max_instances=1,coalesce=True,id="reminder")
+    _scheduler.add_job(clean_old_activity,"interval",hours=24,max_instances=1,coalesce=True,id="retention")
     _scheduler.start()
     return t
 
@@ -82,3 +83,17 @@ def restore_user_session():
     with SessionLocal() as db:
         s=db.scalar(select(WorkSession).where(WorkSession.finished_at.is_(None)).order_by(WorkSession.id.desc()))
         if s:set_user(s.user_id)
+
+
+def clean_old_activity():
+    """Enforce user-selected local data retention daily."""
+    from .models import User
+    from .enhancements import retention_cleanup
+    try:
+        with tracker.lock:
+            with SessionLocal() as db:
+                for user_id in db.scalars(select(User.id)):
+                    retention_cleanup(db,user_id)
+                db.commit()
+    except Exception:
+        logger.exception("Data retention cleanup failed")
