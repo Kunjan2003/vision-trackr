@@ -14,7 +14,7 @@ type Privacy={paused:boolean;hide_window_titles:boolean;retention_days:number;br
 type PrivacyRule={id:number;pattern:string;action:"exclude"|"mask"};
 type Assignment={project_id:number|null;task_id:number|null};
 type IdleItem={id:number;start:string;end:string;seconds:number};
-type ManualRow={id:number;started_at:string;ended_at:string;state:string;note:string};
+type ManualRow={id:number;started_at:string;ended_at:string;state:string;note:string;project_id:number|null;task_id:number|null};
 const dateTimeLocal=(millis:number)=>{const d=new Date(millis);return localDay(d)+"T"+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");};
 type Focus={id:number;started_at:string;finished_at:string|null;duration_minutes:number;status:"running"|"completed"|"finished";task_id:number|null};
 type Attendance={days:{date:string;work:number;productivity:number;goal_met:boolean;status:string}[];total_work:number;goal_days:number};
@@ -58,6 +58,8 @@ export default function WorkspaceV2({section,onRefresh}:{section:SuiteSection;on
  const [manualEnd,setManualEnd]=useState(()=>dateTimeLocal(Date.now()));
  const [manualNote,setManualNote]=useState("");
  const [manualState,setManualState]=useState<"productive"|"neutral"|"break">("productive");
+ const [manualProject,setManualProject]=useState<number|null>(null);
+ const [manualTask,setManualTask]=useState<number|null>(null);
  const [idleDecision,setIdleDecision]=useState<Record<number,string>>({});
  const [focus,setFocus]=useState<Focus|null>(null);
  const [focusMinutes,setFocusMinutes]=useState(25);
@@ -82,18 +84,18 @@ export default function WorkspaceV2({section,onRefresh}:{section:SuiteSection;on
  const refresh=useCallback(async()=>{
   try{
    if(section==="projects"){
-    const [p,t,r,a,th]=await Promise.all([api("/v2/projects"),api("/v2/tasks"),api("/v2/project-rules"),api("/v2/assignment"),api("/v2/tasks/analytics")]);
+    const [p,t,r,a,th]=await Promise.all([api("/v2/projects"),api("/v2/tasks"),api("/v2/project-rules"),api("/v2/assignment"),api("/v2/tasks/analytics?tz="+offset())]);
     setProjects(p);setTasks(t);setRules(r);setAssignment(a);setTaskHours(Object.fromEntries(th.map((item:{task_id:number;hours:number})=>[item.task_id,item.hours])));
    }else if(section==="privacy"){
-    const [p,r,i,m]=await Promise.all([api("/v2/privacy"),api("/v2/privacy/rules"),api("/v2/idle/pending"),api("/v2/manual?day="+manualDay)]);
-    setPrivacy(p);setPrivacyRules(r);setIdle(i);setManualRows(m);
+    const [p,r,i,m,projectsData,tasksData]=await Promise.all([api("/v2/privacy"),api("/v2/privacy/rules"),api("/v2/idle/pending"),api("/v2/manual?day="+manualDay+"&tz="+offset()),api("/v2/projects"),api("/v2/tasks")]);
+    setPrivacy(p);setPrivacyRules(r);setIdle(i);setManualRows(m);setProjects(projectsData);setTasks(tasksData);
    }else if(section==="focus"){setFocus(await api("/v2/focus"));}
    else if(section==="attendance"){
     const [year,m]=month.split("-").map(Number);
     setAttendance(await api("/v2/attendance?year="+year+"&month="+m+"&tz="+offset()));
    }else if(section==="insights"){setInsights(await api("/v2/insights"));}
    else if(section==="calendar"){setMeetings(await api("/v2/meetings?day="+calendarDay));}
-   else if(section==="reports"){setProjectReport(await api("/v2/projects/analytics?start="+reportStart+"&end="+reportEnd));}
+   else if(section==="reports"){setProjectReport(await api("/v2/projects/analytics?start="+reportStart+"&end="+reportEnd+"&tz="+offset()));}
    else if(section==="browser"){setPrivacy(await api("/v2/privacy"));}
    setError("");
   }catch(e){setError(errorMsg(e));}
@@ -202,14 +204,16 @@ export default function WorkspaceV2({section,onRefresh}:{section:SuiteSection;on
    <section className="panel suite-space"><div className="panel-heading"><div><h3>Manual time entry</h3><p>Add work performed away from your computer. Entries cannot overlap captured activities.</p></div></div>
     <div className="suite-actions"><label>Started <input type="datetime-local" value={manualStart} onChange={e=>setManualStart(e.target.value)}/></label>
     <label>Ended <input type="datetime-local" value={manualEnd} onChange={e=>setManualEnd(e.target.value)}/></label>
-    <label>Classification<select value={manualState} onChange={e=>setManualState(e.target.value as "productive"|"neutral"|"break")}><option value="productive">Productive</option><option value="neutral">Neutral</option><option value="break">Break</option></select></label></div>
+    <label>Classification<select value={manualState} onChange={e=>setManualState(e.target.value as "productive"|"neutral"|"break")}><option value="productive">Productive</option><option value="neutral">Neutral</option><option value="break">Break</option></select></label>
+    <label>Project<select aria-label="Manual entry project" value={manualProject??""} onChange={e=>{setManualProject(e.target.value?Number(e.target.value):null);setManualTask(null);}}><option value="">No project</option>{projects.filter(p=>!p.archived).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+    <label>Task<select aria-label="Manual entry task" value={manualTask??""} disabled={!manualProject} onChange={e=>setManualTask(e.target.value?Number(e.target.value):null)}><option value="">No task</option>{tasks.filter(t=>t.project_id===manualProject).map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label></div>
     <div className="suite-actions suite-space"><input aria-label="Time entry note" placeholder="Note about time away" value={manualNote} onChange={e=>setManualNote(e.target.value)} maxLength={300}/>
       <button disabled={busy||!manualStart||!manualEnd} className="primary" onClick={()=>void run(async()=>{
-        await api("/v2/manual","POST",{started_at:new Date(manualStart).toISOString(),ended_at:new Date(manualEnd).toISOString(),state:manualState,note:manualNote});
+        await api("/v2/manual","POST",{started_at:new Date(manualStart).toISOString(),ended_at:new Date(manualEnd).toISOString(),state:manualState,note:manualNote,project_id:manualProject,task_id:manualTask});
         setManualNote("");
       },"Manual time recorded.")}><Plus size={15}/> Add time</button>
     </div><div className="suite-actions suite-space"><label>Browse day <input type="date" value={manualDay} onChange={e=>setManualDay(e.target.value)}/></label></div>
-    <div className="mini-list">{manualRows.map(row=><div className="mini-row" key={row.id}><FileClock size={17}/><span><b>{new Date(row.started_at).toLocaleTimeString()} – {new Date(row.ended_at).toLocaleTimeString()} · {row.state}</b><small>{row.note||"Manual correction"}</small></span><button className="icon-action" title="Remove manual time" onClick={()=>void run(()=>api("/v2/manual/"+row.id,"DELETE"),"Manual entry removed.")}><Trash2 size={16}/></button></div>)}{!manualRows.length&&<p className="small-note">No manual entries for this day.</p>}</div>
+    <div className="mini-list">{manualRows.map(row=><div className="mini-row" key={row.id}><FileClock size={17}/><span><b>{new Date(row.started_at).toLocaleTimeString()} – {new Date(row.ended_at).toLocaleTimeString()} · {row.state}</b><small>{row.note||"Manual correction"}{row.project_id?" · "+(projects.find(p=>p.id===row.project_id)?.name||"Project"):""}{row.task_id?" / "+(tasks.find(t=>t.id===row.task_id)?.name||"Task"):""}</small></span><button className="icon-action" title="Remove manual time" onClick={()=>void run(()=>api("/v2/manual/"+row.id,"DELETE"),"Manual entry removed.")}><Trash2 size={16}/></button></div>)}{!manualRows.length&&<p className="small-note">No manual entries for this day.</p>}</div>
    </section>
   </>}
 

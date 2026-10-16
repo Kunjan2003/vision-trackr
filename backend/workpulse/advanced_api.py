@@ -18,7 +18,7 @@ from .security import current_user, get_db
 from .models import (User, Project, WorkTask, ProjectRule, ActiveAssignment,
     PrivacySettings, PrivacyRule, ActivitySlice, ManualEntry, IdleReview,
     FocusBlock, CalendarMeeting, WorkSession)
-from .stats import day_stats, period_stats
+from .stats import bounds, day_stats, period_stats
 from .enhancements import retention_cleanup
 
 router=APIRouter(prefix="/v2",tags=["WorkPulse v2"])
@@ -247,9 +247,10 @@ def utc_naive(dt:datetime):
     return dt.astimezone(timezone.utc).replace(tzinfo=None) if dt.tzinfo else dt
 
 @router.get("/manual")
-def manual_entries(day:date=Query(default_factory=date.today),user:User=Depends(current_user),db:Session=Depends(get_db)):
-    start=datetime.combine(day,datetime.min.time())
-    end=start+timedelta(days=1)
+def manual_entries(day:date=Query(default_factory=date.today),tz:int=Query(default=0,ge=-840,le=840),user:User=Depends(current_user),db:Session=Depends(get_db)):
+    # Interpret the requested date in the user's local timezone, matching the
+    # dashboard and the rest of the reporting API (tz = UTC - local minutes).
+    start,end=bounds(day,tz)
     return [as_dict(x,("id","started_at","ended_at","state","note","project_id","task_id")) for x in db.scalars(select(ManualEntry).where(ManualEntry.user_id==user.id,ManualEntry.ended_at>start,ManualEntry.started_at<end))]
 
 @router.post("/manual",status_code=201)
@@ -321,10 +322,11 @@ def attendance(year:int=Query(ge=2000,le=2100),month:int=Query(ge=1,le=12),
 @router.get("/projects/analytics")
 def project_analytics(start:date=Query(default_factory=lambda:date.today()-timedelta(days=6)),
                       end:date=Query(default_factory=date.today),
+                      tz:int=Query(default=0,ge=-840,le=840),
                       user:User=Depends(current_user),db:Session=Depends(get_db)):
     if end<start or (end-start).days>365:raise HTTPException(422,"Range must be 0–365 days")
-    left=datetime.combine(start,datetime.min.time())
-    right=datetime.combine(end+timedelta(days=1),datetime.min.time())
+    left,_=bounds(start,tz)
+    _,right=bounds(end+timedelta(days=1),tz)
     tracked=db.scalars(select(ActivitySlice).where(ActivitySlice.user_id==user.id,ActivitySlice.started_at<right,ActivitySlice.ended_at>left,ActivitySlice.project_id.is_not(None))).all()
     manual=db.scalars(select(ManualEntry).where(ManualEntry.user_id==user.id,ManualEntry.started_at<right,ManualEntry.ended_at>left,ManualEntry.project_id.is_not(None))).all()
     seconds=defaultdict(float)
@@ -353,10 +355,11 @@ def ai_insights(user:User=Depends(current_user),db:Session=Depends(get_db)):
 @router.get("/tasks/analytics")
 def task_analytics(start:date=Query(default_factory=lambda:date.today()-timedelta(days=6)),
                    end:date=Query(default_factory=date.today),
+                   tz:int=Query(default=0,ge=-840,le=840),
                    user:User=Depends(current_user),db:Session=Depends(get_db)):
     if end<start or (end-start).days>365:raise HTTPException(422,"Range must be 0–365 days")
-    left=datetime.combine(start,datetime.min.time())
-    right=datetime.combine(end+timedelta(days=1),datetime.min.time())
+    left,_=bounds(start,tz)
+    _,right=bounds(end+timedelta(days=1),tz)
     tracked=db.scalars(select(ActivitySlice).where(ActivitySlice.user_id==user.id,
         ActivitySlice.started_at<right,ActivitySlice.ended_at>left,ActivitySlice.task_id.is_not(None))).all()
     manual=db.scalars(select(ManualEntry).where(ManualEntry.user_id==user.id,

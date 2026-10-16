@@ -25,7 +25,7 @@ def export_range(start:date,end:date,format:str=Query("csv",pattern="^(csv|pdf)$
     if end<start or (end-start).days>365:
         raise HTTPException(422,"Range must be between 1 and 366 days")
     period=period_stats(db,user.id,start,(end-start).days+1,tz)
-    projects=project_analytics(start,end,user,db)
+    projects=project_analytics(start,end,tz,user,db)
     name="WorkPulse-"+start.isoformat()+"-"+end.isoformat()
     if format=="csv":
         out=io.StringIO(newline="")
