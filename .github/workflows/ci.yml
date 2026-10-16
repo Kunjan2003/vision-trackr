@@ -1,0 +1,61 @@
+name: WorkPulse CI and Windows Installer
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  tests:
+    name: Unit tests and UI build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install backend
+        run: pip install -r backend/requirements.txt
+      - name: Run Python tests
+        env:
+          PYTHONPATH: backend
+        run: python -m pytest -q backend/tests
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install UI packages
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+      - name: Type-check and build UI
+        working-directory: desktop
+        run: npm run build:ui
+  windows:
+    name: Windows NSIS installer
+    needs: tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install -r backend/requirements.txt pillow
+      - run: python scripts/make_icons.py
+      - name: PyInstaller agent
+        shell: pwsh
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --name workpulse-backend --paths backend --distpath backend/dist --workpath backend/build --add-data "backend/alembic.ini;." --add-data "backend/alembic;alembic" --collect-submodules uvicorn --collect-submodules sqlalchemy.dialects.sqlite --hidden-import win32timezone backend/run_backend.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install UI packages
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+      - name: Package Windows installer
+        working-directory: desktop
+        run: npm run build:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WorkPulse-Windows-Installer
+          path: desktop/release/WorkPulse-Setup.exe
+          if-no-files-found: error
+          retention-days: 14
