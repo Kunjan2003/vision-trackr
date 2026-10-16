@@ -38,7 +38,7 @@ def run():
                     opened=db.scalar(select(WorkSession).where(WorkSession.user_id==user_id,WorkSession.finished_at.is_(None)).order_by(WorkSession.id.desc()))
                     if opened:
                         fg=observe()
-                        foreground={"app_name":fg.app_name,"title":fg.title}
+                        foreground={"app_name":fg.app_name,"title":""}
                         last_state=tracker.tick(db,user_id,fg)
                         db.commit()
                     else:last_state,foreground="finished",{"app_name":"","title":""}
