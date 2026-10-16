@@ -348,3 +348,23 @@ def ai_insights(user:User=Depends(current_user),db:Session=Depends(get_db)):
     if not prefs.ai_opt_in:raise HTTPException(403,"Enable local AI insights in Privacy settings")
     from .insights import ask_local_ollama
     return {"text":ask_local_ollama(local_insights(user,db))}
+
+
+@router.get("/tasks/analytics")
+def task_analytics(start:date=Query(default_factory=lambda:date.today()-timedelta(days=6)),
+                   end:date=Query(default_factory=date.today),
+                   user:User=Depends(current_user),db:Session=Depends(get_db)):
+    if end<start or (end-start).days>365:raise HTTPException(422,"Range must be 0–365 days")
+    left=datetime.combine(start,datetime.min.time())
+    right=datetime.combine(end+timedelta(days=1),datetime.min.time())
+    tracked=db.scalars(select(ActivitySlice).where(ActivitySlice.user_id==user.id,
+        ActivitySlice.started_at<right,ActivitySlice.ended_at>left,ActivitySlice.task_id.is_not(None))).all()
+    manual=db.scalars(select(ManualEntry).where(ManualEntry.user_id==user.id,
+        ManualEntry.started_at<right,ManualEntry.ended_at>left,ManualEntry.task_id.is_not(None))).all()
+    seconds=defaultdict(float)
+    for item in [*tracked,*manual]:
+        if item.state in ("productive","neutral"):
+            seconds[item.task_id]+=max(0,(min(right,item.ended_at)-max(left,item.started_at)).total_seconds())
+    return [{"task_id":task.id,"project_id":task.project_id,"name":task.name,
+             "hours":round(seconds[task.id]/3600,2),"estimate_minutes":task.estimate_minutes}
+            for task in db.scalars(select(WorkTask).where(WorkTask.user_id==user.id))]
