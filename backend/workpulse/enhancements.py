@@ -32,6 +32,7 @@ class CapturePolicy:
     project_id:int|None=None
     task_id:int|None=None
     meeting:bool=False
+    original:Foreground|None=None
 
 def capture_policy(db:Session,user_id:int,fg:Foreground,now:datetime)->CapturePolicy:
     settings=db.get(PrivacySettings,user_id)
@@ -64,7 +65,7 @@ def capture_policy(db:Session,user_id:int,fg:Foreground,now:datetime)->CapturePo
             CalendarMeeting.user_id==user_id,
             CalendarMeeting.starts_at<=now,CalendarMeeting.ends_at>now
         ).limit(1)))
-    return CapturePolicy(False,Foreground(fg.app_name,"" if mask else title,fg.idle_seconds,fg.locked),project_id,task_id,meeting)
+    return CapturePolicy(False,Foreground(fg.app_name,"" if mask else title,fg.idle_seconds,fg.locked),project_id,task_id,meeting,fg)
 
 def retention_cleanup(db:Session,user_id:int,now:datetime|None=None)->int:
     from .models import ActivitySlice,IdleReview,ManualEntry
