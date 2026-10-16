@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from . import agent
 from .db import SessionLocal
-from .models import ActivitySlice, CategoryRule, User, UserSettings, WorkSession
+from .models import ActivitySlice, CategoryRule, User, UserSettings, WorkSession, IdleReview
 from .schemas import Login, Register, RuleInput, SettingsPatch
 from .security import CAPABILITY, current_user, get_db, hash_password, issue_token, throttle, verify_capability, verify_password
 from .stats import bounds, clipped, day_stats, period_stats, slices_for
@@ -121,6 +121,7 @@ async def live_socket(ws: WebSocket):
                     t = state["today"]
                     t["productivity"] = round(100*t["productive"]/t["work"], 1) if t["work"] else 0.0
                 state["reminder"] = agent.reminder
+                state["idle_pending"] = db.scalar(select(func.count(IdleReview.id)).where(IdleReview.user_id==user_id,IdleReview.resolved==False)) or 0
             await ws.send_json(state)
             await asyncio.sleep(1)
     except (WebSocketDisconnect, asyncio.TimeoutError, ValueError, KeyError):

@@ -9,7 +9,7 @@ const {WebSocket}=require("ws");
 const {autoUpdater}=require("electron-updater");
 if(!app.requestSingleInstanceLock()){app.quit();process.exit(0);}
 let dashboard,widget,tray,backend,socket;
-let port=null,token=null,quitting=false,restartTimer=null,lastReminder=null;
+let port=null,token=null,quitting=false,restartTimer=null,lastReminder=null,lastIdlePending=0;
 const capability=randomBytes(48).toString("hex");
 const sessionPath=()=>join(app.getPath("userData"),"session.enc");
 function loadSession(){try{if(safeStorage.isEncryptionAvailable()&&existsSync(sessionPath()))token=safeStorage.decryptString(readFileSync(sessionPath()));}catch{token=null;}}
@@ -37,6 +37,12 @@ function connectLive(){
  ws.addEventListener("message",e=>{try{const data=JSON.parse(e.data);broadcast("live:state",data);
   if(data.reminder?.id&&data.reminder.id!==lastReminder){lastReminder=data.reminder.id;
    if(Notification.isSupported())new Notification({title:"WorkPulse - Break reminder",body:data.reminder.message}).show();}
+  if(data.idle_pending>lastIdlePending && Notification.isSupported()){
+    const n=new Notification({title:"WorkPulse • Idle time to review",body:"Review time away from your computer and classify it accurately."});
+    n.on("click",()=>{openDashboard();dashboard?.webContents.send("dashboard:navigate","privacy");});
+    n.show();
+  }
+  lastIdlePending=data.idle_pending||0;
   }catch{}});
  ws.addEventListener("close",()=>{if(socket===ws){socket=null;if(!quitting&&port&&token)setTimeout(()=>{if(!socket)connectLive();},2000);}});
  ws.addEventListener("error",()=>{});

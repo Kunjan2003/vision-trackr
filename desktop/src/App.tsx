@@ -89,6 +89,7 @@ export default function App(){
   return ()=>{cancelled=true;};
  },[]);
  useEffect(()=>window.workpulse.onLive(setLive),[]);
+ useEffect(()=>window.workpulse.onNavigate(next=>{if(next==="privacy")setView("privacy");}),[]);
  useEffect(()=>{if(phase==="ready"&&profile){void loadData();const id=setInterval(()=>void loadData(),20000);return ()=>clearInterval(id);}},[phase,profile,loadData]);
  useEffect(()=>{
   if(phase!=="ready"||!profile)return;
@@ -145,6 +146,7 @@ export default function App(){
  </aside><main className="main-content">
   <header className="topbar"><span className="breadcrumb">Workspace <span>/</span> {display(view)}</span><div className="top-right"><div className="session-toolbar">{live?.status==="finished"?<button disabled={busy} onClick={()=>void action("start")}><Play size={14}/> Start</button>:<><button disabled={busy} onClick={()=>void action(live?.status==="break"?"resume":"break")}>{live?.status==="break"?<Play size={14}/>:<Coffee size={14}/>} {live?.status==="break"?"Resume":"Break"}</button><button disabled={busy} title="Finish day" onClick={()=>void action("finish")}><Square size={13}/></button></>}</div><span className="online"><span className="status-dot"/> {live?.state==="private"?"Private pause":live?.status==="break"?"On break":live?.status==="finished"?"Finished":live?.state==="idle"?"Idle":"Tracking"}</span><span className="today-label"><CalendarDays size={16}/> {new Date().toLocaleDateString([], {month:"short",day:"numeric",year:"numeric"})}</span></div></header>
   <div className="content">
+   {(live?.idle_pending||0)>0&&<div className="alert alert-ok"><span>You have {live?.idle_pending} idle period(s) to review. Correct your timesheet when ready.</span><button onClick={()=>setView("privacy")}>Review idle time</button></div>}
    {error&&<div className="alert alert-error" role="alert">{error}<button onClick={()=>setError("")}>×</button></div>}
    {notice&&<div className="alert alert-ok" role="status">{notice}<button onClick={()=>setNotice("")}>×</button></div>}
    {view==="overview"||view==="activity"?<>
