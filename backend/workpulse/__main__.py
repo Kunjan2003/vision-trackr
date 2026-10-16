@@ -28,6 +28,8 @@ def main():
     sock.bind(("127.0.0.1", 0))
     sock.listen(128)
     port = sock.getsockname()[1]
+    from .discovery import start_discovery
+    discovery = start_discovery(port)
     app.state.port = port
     # The secret is transmitted to Electron via inherited environment, not a URL or log.
     print(f'WORKPULSE_PORT={port}', flush=True)
@@ -36,6 +38,9 @@ def main():
         uvicorn.Server(config).run(sockets=[sock])
     finally:
         agent.stop()
+        if discovery:
+            discovery.shutdown()
+            discovery.server_close()
         sock.close()
 
 if __name__ == "__main__":
