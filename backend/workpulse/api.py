@@ -114,11 +114,10 @@ async def live_socket(ws: WebSocket):
                 if s:
                     age = max(0.0, min(8.0, (datetime.utcnow() - s.last_tick_at).total_seconds()))
                     which = "break" if s.status == "break" else agent.last_state
-                    if which not in ("productive", "neutral", "non_productive", "idle", "break"):
-                        which = "neutral"
-                    state["today"][which] += age
-                    if which != "break":
-                        state["today"]["work"] += age
+                    if which in ("productive", "neutral", "non_productive", "idle", "break"):
+                        state["today"][which] += age
+                        if which != "break":
+                            state["today"]["work"] += age
                     t = state["today"]
                     t["productivity"] = round(100*t["productive"]/t["work"], 1) if t["work"] else 0.0
                 state["reminder"] = agent.reminder

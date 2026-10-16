@@ -21,7 +21,7 @@ def foreground_with_domain(db:Session,user_id:int,fg:Foreground,now:datetime)->F
     if not p or not p.browser_opt_in or fg.app_name.lower() not in BROWSERS:
         return fg
     hint=_browser_hints.get(user_id)
-    if not hint or (now-hint[1]).total_seconds()>10:
+    if not hint or (now-hint[1]).total_seconds()>45:
         return fg
     return Foreground(fg.app_name,(fg.title+" ["+hint[0]+"]")[:500],fg.idle_seconds,fg.locked)
 
