@@ -60,8 +60,8 @@ def upgrade():
     for table, columns in tables.items():
         op.create_table(table,*columns)
     with op.batch_alter_table("activity_slices") as batch:
-        batch.add_column(sa.Column("project_id", sa.Integer(), sa.ForeignKey("projects.id"), nullable=True))
-        batch.add_column(sa.Column("task_id", sa.Integer(), sa.ForeignKey("work_tasks.id"), nullable=True))
+        batch.add_column(sa.Column("project_id", sa.Integer(), sa.ForeignKey("projects.id",name="fk_activity_slices_project"), nullable=True))
+        batch.add_column(sa.Column("task_id", sa.Integer(), sa.ForeignKey("work_tasks.id",name="fk_activity_slices_task"), nullable=True))
     op.create_index("ix_activity_slices_project_id", "activity_slices", ["project_id"])
     for table in ["projects","work_tasks","project_rules","privacy_rules","manual_entries","idle_reviews","focus_blocks","calendar_meetings"]:
         op.create_index("ix_"+table+"_user_id",table,["user_id"])
