@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("workpulse",{
  onNavigate:cb=>{const fn=(_,view)=>cb(view);ipcRenderer.on("dashboard:navigate",fn);return ()=>ipcRenderer.removeListener("dashboard:navigate",fn);},
  showDashboard:()=>ipcRenderer.invoke("window:dashboard"),
  shrinkWidget:compact=>ipcRenderer.invoke("window:compact",compact),
+ minimizeWidget:()=>ipcRenderer.invoke("window:minimize-widget"),
  closeDashboard:()=>ipcRenderer.invoke("window:hide"),
  setAutoStart:enabled=>ipcRenderer.invoke("system:autostart",enabled),
  signOut:()=>ipcRenderer.invoke("auth:signout"),

@@ -115,6 +115,7 @@ ipcMain.handle("api:export",async(_e,{format,day,tz})=>{
 });
 ipcMain.handle("window:dashboard",openDashboard);
 ipcMain.handle("window:compact",(_e,compact)=>{if(widget)widget.setSize(compact?164:310,compact?66:174);});
+ipcMain.handle("window:minimize-widget",()=>widget&&widget.hide());
 ipcMain.handle("window:hide",()=>dashboard&&dashboard.hide());
 ipcMain.handle("system:autostart",(_e,enabled)=>setAutoStart(enabled));
 ipcMain.handle("auth:signout",async()=>{await clearSession();if(widget)widget.hide();});

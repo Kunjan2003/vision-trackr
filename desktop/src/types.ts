@@ -14,6 +14,7 @@ declare global {interface Window{workpulse:{
  onNavigate:(fn:(view:string)=>void)=>(()=>void);
  showDashboard:()=>Promise<void>;
  shrinkWidget:(compact:boolean)=>Promise<void>;
+ minimizeWidget:()=>Promise<void>;
  closeDashboard:()=>Promise<void>;
  setAutoStart:(enabled:boolean)=>Promise<void>;
  signOut:()=>Promise<void>;
