@@ -253,3 +253,6 @@ from .backup import router as backup_router
 app.include_router(backup_router)
 from .calendar_api import router as calendar_router
 app.include_router(calendar_router)
+
+from .report_api import router as reporting_router
+app.include_router(reporting_router)
