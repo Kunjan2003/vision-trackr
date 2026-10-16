@@ -153,3 +153,10 @@ class CalendarMeeting(Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     __table_args__ = (UniqueConstraint("user_id", "external_uid"),)
+
+
+class BrowserPair(Base):
+    __tablename__ = "browser_pair"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
