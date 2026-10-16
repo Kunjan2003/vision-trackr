@@ -39,6 +39,7 @@ const heading:Record<SuiteSection,[string,string]>={
 export default function WorkspaceV2({section,onRefresh}:{section:SuiteSection;onRefresh?:()=>void}){
  const [projects,setProjects]=useState<Project[]>([]);
  const [tasks,setTasks]=useState<Task[]>([]);
+ const [taskHours,setTaskHours]=useState<Record<number,number>>({});
  const [rules,setRules]=useState<ProjectRule[]>([]);
  const [assignment,setAssignment]=useState<Assignment>({project_id:null,task_id:null});
  const [projectForm,setProjectForm]=useState(blankProject);
@@ -81,8 +82,8 @@ export default function WorkspaceV2({section,onRefresh}:{section:SuiteSection;on
  const refresh=useCallback(async()=>{
   try{
    if(section==="projects"){
-    const [p,t,r,a]=await Promise.all([api("/v2/projects"),api("/v2/tasks"),api("/v2/project-rules"),api("/v2/assignment")]);
-    setProjects(p);setTasks(t);setRules(r);setAssignment(a);
+    const [p,t,r,a,th]=await Promise.all([api("/v2/projects"),api("/v2/tasks"),api("/v2/project-rules"),api("/v2/assignment"),api("/v2/tasks/analytics")]);
+    setProjects(p);setTasks(t);setRules(r);setAssignment(a);setTaskHours(Object.fromEntries(th.map((item:{task_id:number;hours:number})=>[item.task_id,item.hours])));
    }else if(section==="privacy"){
     const [p,r,i,m]=await Promise.all([api("/v2/privacy"),api("/v2/privacy/rules"),api("/v2/idle/pending"),api("/v2/manual?day="+manualDay)]);
     setPrivacy(p);setPrivacyRules(r);setIdle(i);setManualRows(m);
@@ -160,7 +161,7 @@ export default function WorkspaceV2({section,onRefresh}:{section:SuiteSection;on
      <select aria-label="Task status" value={taskForm.status} onChange={e=>setTaskForm({...taskForm,status:e.target.value as Task["status"]})}>{(["todo","doing","done"] as const).map(x=><option key={x}>{x}</option>)}</select>
      <input title="Estimated minutes" type="number" min="0" placeholder="Minutes" value={taskForm.estimate_minutes} onChange={e=>setTaskForm({...taskForm,estimate_minutes:Number(e.target.value)})}/>
      <button className="primary" disabled={busy} onClick={()=>void saveTask()}><Plus size={16}/> {taskForm.id?"Save":"Add task"}</button></div>
-    <div className="task-board">{(["todo","doing","done"] as const).map(status=><div key={status}><h4>{status.toUpperCase()} <span>{tasks.filter(t=>t.status===status).length}</span></h4>{tasks.filter(t=>t.status===status).map(t=><button className="task-tile" key={t.id} onClick={()=>setTaskForm(t)}><strong>{t.name}</strong><small>{projects.find(p=>p.id===t.project_id)?.name} · {t.estimate_minutes} min estimated</small></button>)}</div>)}</div>
+    <div className="task-board">{(["todo","doing","done"] as const).map(status=><div key={status}><h4>{status.toUpperCase()} <span>{tasks.filter(t=>t.status===status).length}</span></h4>{tasks.filter(t=>t.status===status).map(t=><button className="task-tile" key={t.id} onClick={()=>setTaskForm(t)}><strong>{t.name}</strong><small>{projects.find(p=>p.id===t.project_id)?.name} · {t.estimate_minutes} min estimated · {(taskHours[t.id]||0).toFixed(1)}h tracked (7 days)</small></button>)}</div>)}</div>
    </section>
   </>}
 
