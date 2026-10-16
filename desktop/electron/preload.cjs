@@ -8,5 +8,10 @@ contextBridge.exposeInMainWorld("workpulse",{
  shrinkWidget:compact=>ipcRenderer.invoke("window:compact",compact),
  closeDashboard:()=>ipcRenderer.invoke("window:hide"),
  setAutoStart:enabled=>ipcRenderer.invoke("system:autostart",enabled),
- signOut:()=>ipcRenderer.invoke("auth:signout")
+ signOut:()=>ipcRenderer.invoke("auth:signout"),
+ exportCustom:(format,start,end,tz)=>ipcRenderer.invoke("report:custom",{format,start,end,tz}),
+ importCalendar:()=>ipcRenderer.invoke("calendar:import"),
+ createBackup:password=>ipcRenderer.invoke("backup:create",password),
+ restoreBackup:password=>ipcRenderer.invoke("backup:restore",password),
+ checkUpdates:()=>ipcRenderer.invoke("updates:check")
 });

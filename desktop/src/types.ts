@@ -16,5 +16,10 @@ declare global {interface Window{workpulse:{
  closeDashboard:()=>Promise<void>;
  setAutoStart:(enabled:boolean)=>Promise<void>;
  signOut:()=>Promise<void>;
+ exportCustom:(format:"csv"|"pdf",start:string,end:string,tz:number)=>Promise<string|null>;
+ importCalendar:()=>Promise<{imported:number}|null>;
+ createBackup:(password:string)=>Promise<string|null>;
+ restoreBackup:(password:string)=>Promise<{restart_required:boolean}|null>;
+ checkUpdates:()=>Promise<{available:boolean;version?:string;message:string}>;
 }}}
 export {};
