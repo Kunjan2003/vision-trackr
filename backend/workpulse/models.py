@@ -38,6 +38,8 @@ class ActivitySlice(Base):
     app_name: Mapped[str] = mapped_column(String(255), default="")
     window_title: Mapped[str] = mapped_column(String(500), default="")
     category: Mapped[str] = mapped_column(String(24), default="neutral")
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
+    task_id: Mapped[int | None] = mapped_column(ForeignKey("work_tasks.id"), nullable=True)
 
 class CategoryRule(Base):
     __tablename__ = "category_rules"
@@ -57,3 +59,97 @@ class UserSettings(Base):
     break_reminder_minutes: Mapped[int] = mapped_column(Integer, default=60)
     daily_goal_minutes: Mapped[int] = mapped_column(Integer, default=480)
     theme: Mapped[str] = mapped_column(String(10), default="dark")
+
+# WorkPulse v2: project accounting, privacy controls, focus, attendance and calendar.
+from sqlalchemy import Text
+
+class Project(Base):
+    __tablename__ = "projects"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    client: Mapped[str] = mapped_column(String(120), default="")
+    hourly_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    budget_hours: Mapped[float] = mapped_column(Float, default=0.0)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    __table_args__ = (UniqueConstraint("user_id", "name"),)
+
+class WorkTask(Base):
+    __tablename__ = "work_tasks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    name: Mapped[str] = mapped_column(String(160))
+    status: Mapped[str] = mapped_column(String(24), default="todo")
+    estimate_minutes: Mapped[int] = mapped_column(Integer, default=0)
+
+class ProjectRule(Base):
+    __tablename__ = "project_rules"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    pattern: Mapped[str] = mapped_column(String(160))
+    __table_args__ = (UniqueConstraint("user_id", "pattern"),)
+
+class ActiveAssignment(Base):
+    __tablename__ = "active_assignment"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
+    task_id: Mapped[int | None] = mapped_column(ForeignKey("work_tasks.id"), nullable=True)
+
+class PrivacySettings(Base):
+    __tablename__ = "privacy_settings"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    paused_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    paused: Mapped[bool] = mapped_column(Boolean, default=False)
+    hide_window_titles: Mapped[bool] = mapped_column(Boolean, default=False)
+    retention_days: Mapped[int] = mapped_column(Integer, default=90)
+    browser_opt_in: Mapped[bool] = mapped_column(Boolean, default=False)
+    ai_opt_in: Mapped[bool] = mapped_column(Boolean, default=False)
+    meeting_opt_in: Mapped[bool] = mapped_column(Boolean, default=False)
+
+class PrivacyRule(Base):
+    __tablename__ = "privacy_rules"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    pattern: Mapped[str] = mapped_column(String(120))
+    action: Mapped[str] = mapped_column(String(12), default="exclude")
+    __table_args__ = (UniqueConstraint("user_id", "pattern"),)
+
+class ManualEntry(Base):
+    __tablename__ = "manual_entries"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
+    task_id: Mapped[int | None] = mapped_column(ForeignKey("work_tasks.id"), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    ended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    state: Mapped[str] = mapped_column(String(24), default="productive")
+    note: Mapped[str] = mapped_column(String(300), default="")
+
+class IdleReview(Base):
+    __tablename__ = "idle_reviews"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    slice_id: Mapped[int] = mapped_column(ForeignKey("activity_slices.id"), unique=True)
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+
+class FocusBlock(Base):
+    __tablename__ = "focus_blocks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    task_id: Mapped[int | None] = mapped_column(ForeignKey("work_tasks.id"), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_minutes: Mapped[int] = mapped_column(Integer, default=25)
+    status: Mapped[str] = mapped_column(String(12), default="running")
+
+class CalendarMeeting(Base):
+    __tablename__ = "calendar_meetings"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    external_uid: Mapped[str] = mapped_column(String(200))
+    title: Mapped[str] = mapped_column(String(180))
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (UniqueConstraint("user_id", "external_uid"),)
