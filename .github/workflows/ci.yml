@@ -61,16 +61,7 @@ jobs:
             $port = $null
             for ($i = 0; $i -lt 120; $i++) {
               Start-Sleep -Milliseconds 500
-              $match = Select-String -Path $stdout -Pattern '^WORKPULSE_PORT=(\d+)
-        working-directory: desktop
-        run: npm run build:win
-      - uses: actions/upload-artifact@v4
-        with:
-          name: WorkPulse-Windows-Installer
-          path: desktop/release/WorkPulse-Setup.exe
-          if-no-files-found: error
-          retention-days: 14
- | Select-Object -First 1
+              $match = Select-String -Path $stdout -Pattern '^WORKPULSE_PORT=(\d+)$' | Select-Object -First 1
               if ($match) { $port = $match.Matches[0].Groups[1].Value; break }
               if ($process.HasExited) { throw "Backend exited: $(Get-Content $stderr -Raw)" }
             }
