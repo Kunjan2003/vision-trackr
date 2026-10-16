@@ -37,7 +37,8 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "package.json"
+      "package.json",
+      "assets/**/*"
     ],
     "extraResources": [
       {
@@ -49,7 +50,8 @@
       "target": [
         "nsis"
       ],
-      "artifactName": "WorkPulse-Setup.exe"
+      "artifactName": "WorkPulse-Setup.exe",
+      "icon": "assets/icon.ico"
     },
     "nsis": {
       "oneClick": false,
