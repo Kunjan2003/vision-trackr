@@ -160,3 +160,8 @@ class BrowserPair(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
     token_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+class DashboardPreference(Base):
+    __tablename__ = "dashboard_preferences"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    sections: Mapped[str] = mapped_column(Text, default='["metrics","goal","charts","apps","timeline"]')

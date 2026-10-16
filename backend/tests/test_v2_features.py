@@ -68,3 +68,14 @@ def test_manual_project_time_uses_local_day_and_appears_in_billing():
     assert project_row["billable"]==80.0
     task_hours=client.get("/v2/tasks/analytics?start=2024-01-01&end=2024-01-01&tz=-330",headers=headers).json()
     assert next(row for row in task_hours if row["task_id"]==task.json()["id"])["hours"]==1.0
+
+def test_dashboard_preferences_are_persisted_and_validated():
+    headers=login_headers()
+    default=client.get("/v2/dashboard",headers=headers)
+    assert default.status_code==200
+    assert default.json()["sections"]==["metrics","goal","charts","apps","timeline"]
+    saved=client.put("/v2/dashboard",headers=headers,json={"sections":["charts","metrics","charts"]})
+    assert saved.status_code==200,saved.text
+    assert saved.json()["sections"]==["charts","metrics"]
+    assert client.get("/v2/dashboard",headers=headers).json()["sections"]==["charts","metrics"]
+    assert client.put("/v2/dashboard",headers=headers,json={"sections":["unknown"]}).status_code==422

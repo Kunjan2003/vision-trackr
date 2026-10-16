@@ -4,6 +4,7 @@ All write endpoints are scoped to the logged-in user; there is intentionally no
 remote team administration endpoint.
 """
 import hashlib
+import json
 import secrets
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
@@ -17,11 +18,40 @@ from . import agent
 from .security import current_user, get_db
 from .models import (User, Project, WorkTask, ProjectRule, ActiveAssignment,
     PrivacySettings, PrivacyRule, ActivitySlice, ManualEntry, IdleReview,
-    FocusBlock, CalendarMeeting, WorkSession)
+    FocusBlock, CalendarMeeting, WorkSession, DashboardPreference)
 from .stats import bounds, day_stats, period_stats
 from .enhancements import retention_cleanup
 
 router=APIRouter(prefix="/v2",tags=["WorkPulse v2"])
+
+DASHBOARD_SECTIONS={"metrics","goal","charts","apps","timeline"}
+
+class DashboardIn(BaseModel):
+    sections:list[Literal["metrics","goal","charts","apps","timeline"]]=Field(max_length=5)
+
+@router.get("/dashboard")
+def get_dashboard(user:User=Depends(current_user),db:Session=Depends(get_db)):
+    row=db.get(DashboardPreference,user.id)
+    if not row:
+        return {"sections":["metrics","goal","charts","apps","timeline"]}
+    try:
+        sections=json.loads(row.sections)
+    except (TypeError,ValueError):
+        sections=[]
+    return {"sections":[x for x in sections if x in DASHBOARD_SECTIONS]}
+
+@router.put("/dashboard")
+def save_dashboard(body:DashboardIn,user:User=Depends(current_user),db:Session=Depends(get_db)):
+    # Stable order plus unique IDs prevents duplicate panels and preserves the
+    # order selected in the desktop customizer.
+    sections=list(dict.fromkeys(body.sections))
+    row=db.get(DashboardPreference,user.id)
+    if row is None:
+        row=DashboardPreference(user_id=user.id,sections=json.dumps(sections));db.add(row)
+    else:
+        row.sections=json.dumps(sections)
+    db.commit()
+    return {"sections":sections}
 
 def as_dict(obj, fields):
     return {field: ((getattr(obj,field).astimezone(timezone.utc).replace(tzinfo=None) if getattr(obj,field).tzinfo else getattr(obj,field)).isoformat()+"Z" if isinstance(getattr(obj,field),datetime) else getattr(obj,field)) for field in fields}
