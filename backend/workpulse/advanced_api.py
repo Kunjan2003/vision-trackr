@@ -356,7 +356,7 @@ def project_analytics(start:date=Query(default_factory=lambda:date.today()-timed
                       user:User=Depends(current_user),db:Session=Depends(get_db)):
     if end<start or (end-start).days>365:raise HTTPException(422,"Range must be 0–365 days")
     left,_=bounds(start,tz)
-    _,right=bounds(end+timedelta(days=1),tz)
+    _,right=bounds(end,tz)
     tracked=db.scalars(select(ActivitySlice).where(ActivitySlice.user_id==user.id,ActivitySlice.started_at<right,ActivitySlice.ended_at>left,ActivitySlice.project_id.is_not(None))).all()
     manual=db.scalars(select(ManualEntry).where(ManualEntry.user_id==user.id,ManualEntry.started_at<right,ManualEntry.ended_at>left,ManualEntry.project_id.is_not(None))).all()
     seconds=defaultdict(float)
@@ -365,7 +365,7 @@ def project_analytics(start:date=Query(default_factory=lambda:date.today()-timed
     for row in manual:
         if row.state in ("productive","neutral"):seconds[row.project_id]+=max(0,(min(right,row.ended_at)-max(left,row.started_at)).total_seconds())
     projects=db.scalars(select(Project).where(Project.user_id==user.id)).all()
-    return [{"id":p.id,"name":p.name,"client":p.client,"hours":round(seconds[p.id]/3600,2),
+    return [{"id":p.id,"name":p.name,"client":p.client,"seconds":round(seconds[p.id],6),"hours":round(seconds[p.id]/3600,2),
              "hourly_rate":p.hourly_rate,"billable":round(seconds[p.id]/3600*p.hourly_rate,2),
              "budget_hours":p.budget_hours} for p in projects]
 
@@ -389,7 +389,7 @@ def task_analytics(start:date=Query(default_factory=lambda:date.today()-timedelt
                    user:User=Depends(current_user),db:Session=Depends(get_db)):
     if end<start or (end-start).days>365:raise HTTPException(422,"Range must be 0–365 days")
     left,_=bounds(start,tz)
-    _,right=bounds(end+timedelta(days=1),tz)
+    _,right=bounds(end,tz)
     tracked=db.scalars(select(ActivitySlice).where(ActivitySlice.user_id==user.id,
         ActivitySlice.started_at<right,ActivitySlice.ended_at>left,ActivitySlice.task_id.is_not(None))).all()
     manual=db.scalars(select(ManualEntry).where(ManualEntry.user_id==user.id,

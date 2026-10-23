@@ -165,3 +165,17 @@ class DashboardPreference(Base):
     __tablename__ = "dashboard_preferences"
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
     sections: Mapped[str] = mapped_column(Text, default='["metrics","goal","charts","apps","timeline"]')
+
+class Invoice(Base):
+    __tablename__ = "invoices"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    number: Mapped[str] = mapped_column(String(80))
+    client: Mapped[str] = mapped_column(String(120))
+    currency: Mapped[str] = mapped_column(String(3), default="INR")
+    status: Mapped[str] = mapped_column(String(12), default="draft")
+    issued_on: Mapped[str] = mapped_column(String(10))
+    due_on: Mapped[str] = mapped_column(String(10))
+    total: Mapped[float] = mapped_column(Float)
+    snapshot: Mapped[str] = mapped_column(Text)
+    __table_args__ = (UniqueConstraint("user_id", "number"),)
