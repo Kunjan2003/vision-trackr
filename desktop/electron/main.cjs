@@ -15,7 +15,7 @@ const sessionPath=()=>join(app.getPath("userData"),"session.enc");
 function loadSession(){try{if(safeStorage.isEncryptionAvailable()&&existsSync(sessionPath()))token=safeStorage.decryptString(readFileSync(sessionPath()));}catch{token=null;}}
 function persistSession(value){token=value;if(safeStorage.isEncryptionAvailable())writeFileSync(sessionPath(),safeStorage.encryptString(value));}
 async function clearSession(){token=null;await fs.rm(sessionPath(),{force:true}).catch(()=>{});if(socket){socket.close();socket=null;}}
-const allowed=/^\/(?:health|auth\/(?:status|register|login|me)|session\/(?:start|break|resume|finish)|activity\/live|stats\/(?:day|week|month)|categories(?:\/[0-9]+)?|settings|export|v2\/(?:dashboard|projects(?:\/analytics|\/[0-9]+)?|tasks(?:\/analytics|\/[0-9]+)?|project-rules(?:\/[0-9]+)?|assignment|privacy(?:\/(?:rules(?:\/[0-9]+)?|pause|resume|purge))?|idle\/(?:pending|[0-9]+\/resolve)|manual(?:\/[0-9]+)?|focus(?:\/(?:start|finish))?|attendance|insights(?:\/ai)?|meetings(?:\/import|\/[0-9]+)?|browser\/pair|backups\/(?:create|prepare-restore)))(\?.*)?$/;
+const allowed=/^\/(?:health|auth\/(?:status|register|login|me)|session\/(?:start|break|resume|finish)|activity\/live|stats\/(?:day|week|month)|categories(?:\/[0-9]+)?|settings|export|v3\/(?:summary|invoices(?:\/[0-9]+)?)|v2\/(?:dashboard|projects(?:\/analytics|\/[0-9]+)?|tasks(?:\/analytics|\/[0-9]+)?|project-rules(?:\/[0-9]+)?|assignment|privacy(?:\/(?:rules(?:\/[0-9]+)?|pause|resume|purge))?|idle\/(?:pending|[0-9]+\/resolve)|manual(?:\/[0-9]+)?|focus(?:\/(?:start|finish))?|attendance|insights(?:\/ai)?|meetings(?:\/import|\/[0-9]+)?|browser\/pair|backups\/(?:create|prepare-restore)))(\?.*)?$/;
 async function callApi(path,method="GET",body){
  if(!allowed.test(path)||!["GET","POST","PATCH","PUT","DELETE"].includes(method))throw Error("Invalid API request");
  if(!port)throw Error("Tracker service is connecting");
@@ -66,7 +66,7 @@ function openDashboard(){
 }
 function showWidget(){
  if(!widget||widget.isDestroyed()){
-  widget=makeWindow("widget",{width:310,height:174,resizable:false,frame:false,transparent:true,alwaysOnTop:true,skipTaskbar:true,title:"WorkPulse Mini"});
+  widget=makeWindow("widget",{width:310,height:174,resizable:false,frame:false,transparent:true,backgroundColor:"#00000000",alwaysOnTop:true,skipTaskbar:true,title:"Vision Tracker Mini"});
   widget.setAlwaysOnTop(true,"floating");
   widget.on("close",e=>{if(!quitting){e.preventDefault();widget.hide();}});
  }
@@ -115,6 +115,7 @@ ipcMain.handle("api:export",async(_e,{format,day,tz})=>{
 });
 ipcMain.handle("window:dashboard",openDashboard);
 ipcMain.handle("window:compact",(_e,compact)=>{if(widget)widget.setSize(compact?164:310,compact?66:174);});
+ipcMain.handle("window:minimize-widget",()=>widget&&widget.hide());
 ipcMain.handle("window:hide",()=>dashboard&&dashboard.hide());
 ipcMain.handle("system:autostart",(_e,enabled)=>setAutoStart(enabled));
 ipcMain.handle("auth:signout",async()=>{await clearSession();if(widget)widget.hide();});
@@ -246,3 +247,13 @@ ipcMain.handle("updates:check",async()=>{
 });
 
 ipcMain.handle("browser:show-extension",async()=>{const path=app.isPackaged?join(process.resourcesPath,"browser-extension","manifest.json"):resolve(__dirname,"../../browser-extension/manifest.json");if(!existsSync(path))throw Error("Browser extension directory not found");shell.showItemInFolder(path);return true;});
+
+ipcMain.handle("invoice:export",async(_event,id)=>{
+ if(!Number.isSafeInteger(id)||id<1)throw Error("Invalid invoice");
+ const {canceled,filePath}=await dialog.showSaveDialog(dashboard,{defaultPath:`VisionTracker-invoice-${id}.pdf`,filters:[{name:"PDF document",extensions:["pdf"]}]});
+ if(canceled||!filePath)return null;
+ const response=await fetch(`http://127.0.0.1:${port}/v3/invoices/${id}/export`,{headers:{"X-Agent-Token":capability,Authorization:"Bearer "+token},signal:AbortSignal.timeout(15000)});
+ if(!response.ok)throw Error("Invoice export failed ("+response.status+")");
+ await fs.writeFile(filePath,Buffer.from(await response.arrayBuffer()));
+ return filePath;
+});

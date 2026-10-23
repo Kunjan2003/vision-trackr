@@ -205,14 +205,15 @@ def update_settings(body: SettingsPatch, user: User = Depends(current_user), db:
 @app.get("/export")
 def export(format: Literal["csv", "pdf"] = "csv", day: date = Query(default_factory=date.today),
            tz: int = Query(0, ge=-840, le=840), user: User = Depends(current_user), db: Session = Depends(get_db)):
-    start,end = bounds(day,tz)
-    rows = list(clipped(slices_for(db,user.id,start,end),start,end))
+    from .report_api import csv_safe
+    report_data = day_stats(db,user.id,day,tz)
+    rows = report_data["timeline"]
     if format == "csv":
         buf = io.StringIO()
         writer = csv.writer(buf)
         writer.writerow(["Start (UTC)","End (UTC)","Seconds","Status","Application","Window title"])
-        for item,a,b,secs in rows:
-            writer.writerow([a.isoformat()+"Z",b.isoformat()+"Z",round(secs,1),item.state,item.app_name,item.window_title])
+        for row in rows:
+            writer.writerow([row["start"],row["end"],row["seconds"],row["state"],csv_safe(row["app_name"]),csv_safe(row["title"])])
         return StreamingResponse(iter([buf.getvalue()]),media_type="text/csv",
                                  headers={"Content-Disposition":f'attachment; filename="workpulse-{day}.csv"'})
     buf = io.BytesIO()
@@ -231,12 +232,12 @@ def export(format: Literal["csv", "pdf"] = "csv", day: date = Query(default_fact
     page.setFont("Helvetica-Bold",12)
     page.drawString(46,y,"Top activity")
     page.setFont("Helvetica",9)
-    for item,a,b,secs in rows[:35]:
+    for row in rows:
         y-=17
         if y < 55:
             page.showPage(); y=790; page.setFont("Helvetica",9)
         # replace unsupported font glyphs; truncate titles, never render passwords/content.
-        detail = f'{a.strftime("%H:%M")} {item.state} {item.app_name} {item.window_title}'[:102]
+        detail = f'{row["start"][11:16]} {row["state"]} {row["app_name"]} {row["title"]}'[:102]
         page.drawString(46,y,detail.encode("latin-1","replace").decode("latin-1"))
     page.save(); buf.seek(0)
     return StreamingResponse(buf,media_type="application/pdf",
@@ -256,3 +257,8 @@ app.include_router(calendar_router)
 
 from .report_api import router as reporting_router
 app.include_router(reporting_router)
+
+from .dashboard_api import router as dashboard_router
+from .billing_api import router as billing_router
+app.include_router(dashboard_router)
+app.include_router(billing_router)

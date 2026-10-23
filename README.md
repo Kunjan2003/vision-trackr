@@ -115,3 +115,7 @@ To erase tracked activity permanently, **quit WorkPulse** and remove %LOCALAPPDA
 ## Verification status
 
 The source is designed for Windows 10/11. Automated checks and the packaged build workflow are included; physical Windows acceptance testing for sleep/wake, app focus behavior, tray, registry startup and installer signing is still required for a production release. The present release supports one local user, not remote workforce administration.
+
+## Vision Tracker dashboard redesign
+
+The desktop workspace now includes a new overview, searchable activity explorer, app/website usage, personal timesheets and persistent client invoice records with PDF export. All dashboards use recorded local data. See [feature coverage and verification](docs/timechamp-reference.md), including the enterprise Time Champ capabilities that still require a shared backend or additional agents.

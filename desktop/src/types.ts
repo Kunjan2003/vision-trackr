@@ -8,12 +8,14 @@ export type Settings={idle_threshold:number;poll_interval:number;auto_start:bool
 export type Rule={id:number;pattern:string;category:"productive"|"neutral"|"non_productive";enabled:boolean};
 declare global {interface Window{workpulse:{
  request:(path:string,method?:string,body?:unknown)=>Promise<any>;
+ exportInvoice:(id:number)=>Promise<string|null>;
  exportReport:(format:"csv"|"pdf",day:string,tz:number)=>Promise<string|null>;
  onLive:(fn:(d:Live)=>void)=>(()=>void);
  onReady:(fn:()=>void)=>(()=>void);
  onNavigate:(fn:(view:string)=>void)=>(()=>void);
  showDashboard:()=>Promise<void>;
  shrinkWidget:(compact:boolean)=>Promise<void>;
+ minimizeWidget:()=>Promise<void>;
  closeDashboard:()=>Promise<void>;
  setAutoStart:(enabled:boolean)=>Promise<void>;
  signOut:()=>Promise<void>;
