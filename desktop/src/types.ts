@@ -7,6 +7,10 @@ export type Period={start:string;totals:Totals;days:Array<{date:string}&Totals>}
 export type Settings={idle_threshold:number;poll_interval:number;auto_start:boolean;break_reminder_minutes:number;daily_goal_minutes:number;theme:"dark"|"light"};
 export type Rule={id:number;pattern:string;category:"productive"|"neutral"|"non_productive";enabled:boolean};
 declare global {interface Window{workpulse:{
+ getStartupStatus:()=>Promise<{status:"starting"|"ready"|"failed";message:string}>;
+ restartService:()=>Promise<{status:"starting"|"ready"|"failed";message:string}>;
+ openStartupLog:()=>Promise<void>;
+ onStartup:(fn:(state:{status:"starting"|"ready"|"failed";message:string})=>void)=>(()=>void);
  request:(path:string,method?:string,body?:unknown)=>Promise<any>;
  exportInvoice:(id:number)=>Promise<string|null>;
  exportReport:(format:"csv"|"pdf",day:string,tz:number)=>Promise<string|null>;

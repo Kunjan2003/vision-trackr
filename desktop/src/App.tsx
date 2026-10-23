@@ -43,6 +43,9 @@ function Auth({registered,onDone}:{registered:boolean;onDone:(user:User)=>void})
  </div></div>;
 }
 export default function App(){
+ const [startupAttempt,setStartupAttempt]=useState(0);
+ const [startupFailed,setStartupFailed]=useState(false);
+ const [startupMessage,setStartupMessage]=useState("Starting your local tracking service…");
  const [phase,setPhase]=useState<"loading"|"login"|"register"|"ready">("loading");
  const [profile,setProfile]=useState<User|null>(null);
  const [view,setView]=useState<View>("overview");
@@ -56,23 +59,46 @@ export default function App(){
  const [error,setError]=useState("");
  const loadData=async()=>{setRevision(n=>n+1);};
  useEffect(()=>{
-  let cancelled=false;
+  let cancelled=false,connected=false,inFlight=false,failures=0;
+  setStartupFailed(false);setError("");
+  const timeout=setTimeout(()=>{if(!cancelled&&!connected){setStartupFailed(true);setStartupMessage("The tracking service is taking longer than expected. Retry or open the startup log for details.");}},120000);
   async function boot(){
-   for(let i=0;i<32;i++){
+   if(cancelled||connected||inFlight)return;
+   inFlight=true;
+   try{
+    const service=await window.workpulse.getStartupStatus();
+    if(cancelled)return;
+    setStartupMessage(service.message);
+    if(service.status==="failed"){setStartupFailed(true);return;}
+    if(service.status!=="ready")return;
+    const status=await api("/auth/status");
+    if(cancelled)return;
+    if(!status.registered){connected=true;setPhase("register");return;}
     try{
-     const status=await api("/auth/status");
+     const user=await api("/auth/me");
      if(cancelled)return;
-     if(!status.registered){setPhase("register");return;}
-     try{const u=await api("/auth/me");if(cancelled)return;setProfile(u);setPhase("ready");}
-     catch{if(!cancelled)setPhase("login");}
-     return;
-    }catch{await new Promise(r=>setTimeout(r,500));}
-   }
-   if(!cancelled)setError("Cannot reach the local tracking service. Check the Python environment and restart WorkPulse.");
+     setProfile(user);connected=true;setPhase("ready");
+    }catch(e){
+     if(cancelled)return;
+     // A missing/expired login returns to sign-in; transport and server errors
+     // remain startup errors rather than being mistaken for an expired login.
+     if(/sign in|session expired|account not found|401/i.test(errorText(e))){connected=true;setPhase("login");}
+     else throw e;
+    }
+   }catch(e){if(!cancelled){failures++;setStartupMessage(errorText(e));if(failures>=3)setStartupFailed(true);}}
+   finally{inFlight=false;if(connected){clearTimeout(timeout);clearInterval(timer);}}
   }
+  const unsubscribe=window.workpulse.onReady(()=>void boot());
+  const unsubscribeState=window.workpulse.onStartup(state=>{if(cancelled||connected)return;setStartupMessage(state.message);if(state.status==="failed")setStartupFailed(true);});
+  const timer=setInterval(()=>void boot(),1000);
   void boot();
-  return ()=>{cancelled=true;};
- },[]);
+  return()=>{cancelled=true;clearInterval(timer);clearTimeout(timeout);unsubscribe();unsubscribeState();};
+ },[startupAttempt]);
+ async function retryStartup(){
+  setStartupFailed(false);setStartupMessage("Restarting the local tracking service…");
+  try{await window.workpulse.restartService();setStartupAttempt(n=>n+1);}
+  catch(e){setStartupFailed(true);setStartupMessage(errorText(e));}
+ }
  useEffect(()=>window.workpulse.onLive(setLive),[]);
  useEffect(()=>window.workpulse.onNavigate(next=>{if(next==="privacy")setView("privacy");}),[]);
  useEffect(()=>{
@@ -102,7 +128,7 @@ export default function App(){
  }
  async function deleteRule(rule:Rule){if(!confirm("Remove the rule for "+rule.pattern+"?"))return;try{await api("/categories/"+rule.id,"DELETE");await refreshRules();}catch(e){setError(errorText(e));}}
  async function signout(){try{await window.workpulse.signOut();setProfile(null);setLive(null);setPhase("login");}catch(e){setError(errorText(e));}}
- if(phase==="loading")return <div className="loading-screen"><Brand/><span className="spinner"/><p>{error||"Connecting to your private tracking service..."}</p></div>;
+ if(phase==="loading")return <div className="loading-screen"><Brand/>{startupFailed?<ShieldCheck size={30}/>:<span className="spinner"/>}<h2>{startupFailed?"Tracking service could not start":"Opening your workspace"}</h2><p role={startupFailed?"alert":"status"}>{startupMessage}</p><div className="suite-actions"><button className="primary" onClick={()=>void retryStartup()}>Retry connection</button><button className="secondary" onClick={()=>void window.workpulse.openStartupLog().catch(e=>setStartupMessage(errorText(e)))}>Open startup log</button></div>{startupFailed&&<p className="small-note">If the log says another WorkPulse agent is running, quit WorkPulse from the system tray and reopen it. If needed, restart Windows. Your saved data stays on this PC.</p>}</div>;
  if(phase!=="ready"||!profile)return <Auth registered={phase==="login"} onDone={user=>{setProfile(user);setPhase("ready");}}/>;
  return <div className="app-shell"><aside className="sidebar"><Brand/><div className="sidebar-title">WORKSPACE</div>
   <nav className="nav-menu">{([

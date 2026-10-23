@@ -50,3 +50,11 @@ Run `PYTHONPATH=backend python -m pytest -q backend/tests --disable-warnings` an
 Regression coverage includes local-midnight clipping, adjacent-day exclusion from billing, manual time reconciliation, invoice snapshots, duplicate numbers, client ownership validation, invoice state transitions, PDF output and authenticated routes. Electron main/preload scripts are syntax checked.
 
 Rendered-screen automation was blocked by automatic approval review of the browser installation in this environment. Native Windows foreground capture, tray integration and the packaged installer require Windows verification. Do not interpret a passing UI compilation as a completed Windows smoke test.
+
+## Startup recovery (2.0.1)
+
+The desktop now waits for capability-authenticated `/health` readiness rather than relying on the port announcement alone. Slow onefile extraction can take longer than the old 16-second renderer cutoff; readiness events and polling both reconnect the screen. A failed startup stops the spinner and offers **Retry connection** and **Open startup log**. Logs are rotated under the Electron user-data `logs/startup.log` path and redact the application capability and current session token.
+
+Windows shutdown terminates only the child process tree launched by this application, including PyInstaller's worker. A backend watchdog also exits when its launching desktop disappears, preventing orphan workers from holding the single-instance mutex. An agent left by an older version may require quitting the old tray application or restarting Windows before using the new installer. Saved tracking data is retained.
+
+Startup regression coverage includes split port announcements, health failures, delayed readiness, launch errors, bounded restarts, timeouts, stale process events, clean shutdown and parent exit. Windows CI additionally starts the executable from the packaged desktop resources, registers an account, restarts the complete process tree and signs into the same database.

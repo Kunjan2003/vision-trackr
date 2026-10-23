@@ -23,3 +23,4 @@ button,input,select{transition:background .18s,border-color .18s,box-shadow .18s
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 @media(max-width:570px){.v-filters>.tabs{display:flex;width:100%}.v-filters>.tabs button{flex:1;padding:8px 5px;font-size:9px}.add-rule{flex-wrap:wrap}.add-rule input{width:100%;flex-basis:100%}}
 body.widget-window{background:transparent!important;overflow:hidden;color-scheme:dark}
+.loading-screen{padding:32px;text-align:center}.loading-screen h2{font-size:20px}.loading-screen>p{max-width:740px;overflow-wrap:anywhere;line-height:1.7}.loading-screen .suite-actions{justify-content:center}.loading-screen .small-note{max-width:600px}

@@ -1,5 +1,9 @@
 const {contextBridge,ipcRenderer}=require("electron");
 contextBridge.exposeInMainWorld("workpulse",{
+ getStartupStatus:()=>ipcRenderer.invoke("backend:status"),
+ restartService:()=>ipcRenderer.invoke("backend:restart"),
+ openStartupLog:()=>ipcRenderer.invoke("backend:open-log"),
+ onStartup:cb=>{const fn=(_,data)=>cb(data);ipcRenderer.on("backend:state",fn);return ()=>ipcRenderer.removeListener("backend:state",fn);},
  request:(path,method="GET",body)=>ipcRenderer.invoke("api:request",{path,method,body}),
  exportInvoice:id=>ipcRenderer.invoke("invoice:export",id),
  exportReport:(format,day,tz)=>ipcRenderer.invoke("api:export",{format,day,tz}),

@@ -25,6 +25,9 @@ jobs:
       - name: Install UI packages
         working-directory: desktop
         run: npm install --no-audit --no-fund
+      - name: Test desktop startup supervision
+        working-directory: desktop
+        run: npm run test:startup
       - name: Type-check and build UI
         working-directory: desktop
         run: npm run build:ui
@@ -79,7 +82,7 @@ jobs:
             if ($status.registered) { throw "Expected empty local account database" }
             Write-Host "PyInstaller service starts and answers authenticated HTTP requests"
           } finally {
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            if (!$process.HasExited) { taskkill /pid $process.Id /t /f | Out-Null }
           }
       - name: Install UI packages
         working-directory: desktop
@@ -87,6 +90,8 @@ jobs:
       - name: Package Windows installer
         working-directory: desktop
         run: npm run build:win
+      - name: Verify packaged desktop service startup and restart
+        run: node scripts/smoke-packaged-service.cjs
       - uses: actions/upload-artifact@v4
         with:
           name: WorkPulse-Windows-Installer

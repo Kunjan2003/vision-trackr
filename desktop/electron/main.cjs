@@ -2,14 +2,16 @@
 const {app,BrowserWindow,Tray,Menu,Notification,globalShortcut,shell,ipcMain,dialog,safeStorage,nativeImage}=require("electron");
 const {randomBytes}=require("node:crypto");
 const {join,resolve}=require("node:path");
-const {existsSync,readFileSync,writeFileSync}=require("node:fs");
+const {existsSync,readFileSync,writeFileSync,appendFileSync,statSync,renameSync,mkdirSync}=require("node:fs");
+const {execFile}=require("node:child_process");
+const {BackendService}=require("./backend-service.cjs");
 const fs=require("node:fs/promises");
 const {spawn,execFileSync}=require("node:child_process");
 const {WebSocket}=require("ws");
 const {autoUpdater}=require("electron-updater");
 if(!app.requestSingleInstanceLock()){app.quit();process.exit(0);}
-let dashboard,widget,tray,backend,socket;
-let port=null,token=null,quitting=false,restartTimer=null,lastReminder=null,lastIdlePending=0;
+let dashboard,widget,tray,socket,service;
+let port=null,token=null,quitting=false,lastReminder=null,lastIdlePending=0;
 const capability=randomBytes(48).toString("hex");
 const sessionPath=()=>join(app.getPath("userData"),"session.enc");
 function loadSession(){try{if(safeStorage.isEncryptionAvailable()&&existsSync(sessionPath()))token=safeStorage.decryptString(readFileSync(sessionPath()));}catch{token=null;}}
@@ -59,7 +61,7 @@ function makeWindow(which,options){
 }
 function openDashboard(){
  if(!dashboard||dashboard.isDestroyed()){
-  dashboard=makeWindow("dashboard",{width:1280,height:820,minWidth:940,minHeight:650,title:"WorkPulse"});
+  dashboard=makeWindow("dashboard",{width:1280,height:820,minWidth:940,minHeight:650,title:"Vision Tracker"});
   dashboard.on("close",e=>{if(!quitting){e.preventDefault();dashboard.hide();}});
  }
  dashboard.show();dashboard.focus();
@@ -75,28 +77,51 @@ function showWidget(){
 function createTray(){
  const icon=nativeImage.createFromPath(join(__dirname,"../assets/tray.png"));
  tray=new Tray(icon);tray.setToolTip("WorkPulse");
- tray.setContextMenu(Menu.buildFromTemplate([{label:"Dashboard",click:openDashboard},{label:"Floating timer",click:showWidget},{label:"Toggle private pause",click:()=>void toggleTrackingPause()},{type:"separator"},{label:"Quit WorkPulse",click:()=>{quitting=true;app.quit();}}]));
+ tray.setContextMenu(Menu.buildFromTemplate([{label:"Dashboard",click:openDashboard},{label:"Floating timer",click:showWidget},{label:"Toggle private pause",click:()=>void toggleTrackingPause()},{type:"separator"},{label:"Quit WorkPulse",click:()=>app.quit()}]));
  tray.on("double-click",openDashboard);
 }
-function launchBackend(){
- if(quitting||backend)return;
- port=null;if(socket){socket.close();socket=null;}
- const directory=resolve(__dirname,"../../backend");
- const binary=app.isPackaged?join(process.resourcesPath,"bin","workpulse-backend.exe"):(process.env.WORKPULSE_PYTHON||(process.platform==="win32"?"python":"python3"));
- backend=spawn(binary,app.isPackaged?[]:["-m","workpulse"],{cwd:app.isPackaged?process.resourcesPath:directory,windowsHide:true,stdio:["ignore","pipe","pipe"],env:{...process.env,WORKPULSE_AGENT_TOKEN:capability,PYTHONPATH:directory}});
- backend.on("error",e=>broadcast("live:state",{error:"Service failed: "+e.message}));
- let pending="";
- backend.stdout.on("data",chunk=>{
-  pending+=chunk.toString();const lines=pending.split(/\r?\n/);pending=lines.pop()||"";
-  for(const line of lines){const m=/^WORKPULSE_PORT=(\d+)$/.exec(line.trim());if(m){port=Number(m[1]);broadcast("backend:ready");if(token)connectLive();}}
+const startupLogPath=()=>join(app.getPath("userData"),"logs","startup.log");
+function startupLog(message){
+ try{
+  const path=startupLogPath();mkdirSync(join(app.getPath("userData"),"logs"),{recursive:true});
+  if(existsSync(path)&&statSync(path).size>256*1024)renameSync(path,path+".old");
+  const safe=String(message).replaceAll(capability,"[redacted]").replaceAll(token||capability,"[redacted]");
+  appendFileSync(path,new Date().toISOString()+" "+safe+"\n");
+ }catch(error){console.error("Cannot write startup log:",error.message);}
+}
+function killBackend(child){
+ return new Promise(resolve=>{
+  if(!child?.pid){resolve();return;}
+  if(process.platform==="win32"){
+   // PyInstaller onefile has a bootloader and a worker: terminate our entire
+   // child tree so the old worker cannot hold the single-instance mutex.
+   execFile("taskkill",["/pid",String(child.pid),"/t","/f"],{windowsHide:true,timeout:5000},()=>resolve());
+  }else{child.kill();resolve();}
  });
- backend.stderr.on("data",chunk=>{if(!app.isPackaged)console.error("[backend]",chunk.toString().trim());});
- backend.on("exit",()=>{backend=null;port=null;broadcast("live:state",{error:"Service disconnected"});if(!quitting)restartTimer=setTimeout(launchBackend,2500);});
+}
+function launchBackend(){
+ const directory=resolve(__dirname,"../../backend");
+ service=new BackendService({
+  binary:app.isPackaged?join(process.resourcesPath,"bin","workpulse-backend.exe"):(process.env.WORKPULSE_PYTHON||(process.platform==="win32"?"python":"python3")),
+  args:app.isPackaged?[]:["-m","workpulse"],spawn,fetch,capability,kill:killBackend,log:startupLog,
+  spawnOptions:{cwd:app.isPackaged?process.resourcesPath:directory,windowsHide:true,stdio:["ignore","pipe","pipe"],
+   env:{...process.env,WORKPULSE_AGENT_TOKEN:capability,WORKPULSE_PARENT_PID:process.platform==="win32"?String(process.pid):"",PYTHONUNBUFFERED:"1",PYTHONPATH:directory}},
+  onState:state=>{
+   port=state.status==="ready"?state.port:null;
+   if(socket&&state.status!=="ready"){socket.close();socket=null;}
+   broadcast("backend:state",{status:state.status,message:state.message});
+   if(state.status==="ready"){broadcast("backend:ready");if(token)connectLive();}
+  }
+ });
+ service.start();
 }
 app.on("second-instance",openDashboard);
-app.on("before-quit",()=>{quitting=true;globalShortcut.unregisterAll();clearTimeout(restartTimer);if(socket)socket.close();if(backend)backend.kill();});
+app.on("before-quit",event=>{if(quitting)return;event.preventDefault();quitting=true;globalShortcut.unregisterAll();if(socket)socket.close();void (service?.stop()||Promise.resolve()).finally(()=>app.quit());});
 app.whenReady().then(()=>{loadSession();createTray();launchBackend();if(!process.argv.includes("--hidden"))openDashboard();if(token)showWidget();registerGlobalShortcuts();setInterval(()=>void checkFocusCompletion(),30000);
   setTimeout(()=>void tryAutoUpdate(),120000);setInterval(()=>void tryAutoUpdate(),12*60*60*1000);app.on("activate",openDashboard);});
+ipcMain.handle("backend:status",()=>({status:service?.state.status||"starting",message:service?.state.message||"Starting local service…"}));
+ipcMain.handle("backend:restart",async()=>{port=null;await service?.restart();return {status:service?.state.status||"starting",message:service?.state.message||"Starting local service…"};});
+ipcMain.handle("backend:open-log",async()=>{startupLog("Startup log opened");const error=await shell.openPath(startupLogPath());if(error)throw Error(error);});
 ipcMain.handle("api:request",async(_e,{path,method,body})=>{
  if(body&&JSON.stringify(body).length>100000)throw Error("Request too large");
  const result=await callApi(path,method,body);
@@ -140,7 +165,7 @@ async function toggleTrackingPause(){
  try{
   const status=await callApi("/v2/privacy");
   const next=await callApi(status.paused?"/v2/privacy/resume":"/v2/privacy/pause","POST");
-  if(Notification.isSupported())new Notification({title:"WorkPulse",body:next.paused?"Private pause enabled":"Tracking resumed"}).show();
+  if(Notification.isSupported())new Notification({title:"Vision Tracker",body:next.paused?"Private pause enabled":"Tracking resumed"}).show();
  }catch{}
 }
 async function checkFocusCompletion(){
@@ -191,9 +216,9 @@ ipcMain.handle("backup:restore",async(_event,password)=>{
  const bytes=await fs.readFile(selected.filePaths[0]);
  if(bytes.length>220*1024*1024)throw Error("Backup file exceeds 220 MB");
  const result=await callApi("/v2/backups/prepare-restore","POST",{password,payload:bytes.toString("base64")});
- if(result.restart_required&&backend){
+ if(result.restart_required&&service){
    if(socket){socket.close();socket=null;}
-   backend.kill(); // supervisor starts a new backend, which atomically applies staged restore
+   await service.restart(); // Restart our complete process tree and apply staged restore.
  }
  return result;
 });
