@@ -78,6 +78,9 @@ function createTray(){
  const icon=nativeImage.createFromPath(join(__dirname,"../assets/tray.png"));
  tray=new Tray(icon);tray.setToolTip("WorkPulse");
  tray.setContextMenu(Menu.buildFromTemplate([{label:"Dashboard",click:openDashboard},{label:"Floating timer",click:showWidget},{label:"Toggle private pause",click:()=>void toggleTrackingPause()},{type:"separator"},{label:"Quit WorkPulse",click:()=>app.quit()}]));
+ // A single click on the tray icon opens the floating timer; the dashboard stays
+ // available from the double-click, the tray menu and Ctrl+Alt+Shift+W.
+ tray.on("click",showWidget);
  tray.on("double-click",openDashboard);
 }
 const startupLogPath=()=>join(app.getPath("userData"),"logs","startup.log");
@@ -101,11 +104,12 @@ function killBackend(child){
 }
 function launchBackend(){
  const directory=resolve(__dirname,"../../backend");
+ const localPython=resolve(__dirname,process.platform==="win32"?"../../.venv/Scripts/python.exe":"../../.venv/bin/python");
  service=new BackendService({
-  binary:app.isPackaged?join(process.resourcesPath,"bin","workpulse-backend.exe"):(process.env.WORKPULSE_PYTHON||(process.platform==="win32"?"python":"python3")),
+  binary:app.isPackaged?join(process.resourcesPath,"bin","workpulse-backend.exe"):(process.env.WORKPULSE_PYTHON||(existsSync(localPython)?localPython:(process.platform==="win32"?"python":"python3"))),
   args:app.isPackaged?[]:["-m","workpulse"],spawn,fetch,capability,kill:killBackend,log:startupLog,
   spawnOptions:{cwd:app.isPackaged?process.resourcesPath:directory,windowsHide:true,stdio:["ignore","pipe","pipe"],
-   env:{...process.env,WORKPULSE_AGENT_TOKEN:capability,WORKPULSE_PARENT_PID:process.platform==="win32"?String(process.pid):"",PYTHONUNBUFFERED:"1",PYTHONPATH:directory}},
+   env:{...process.env,...(!app.isPackaged?{WORKPULSE_INSTANCE:"dev",WORKPULSE_DATA_DIR:join(app.getPath("userData"),"data")}:{ }),WORKPULSE_AGENT_TOKEN:capability,WORKPULSE_PARENT_PID:process.platform==="win32"?String(process.pid):"",PYTHONUNBUFFERED:"1",PYTHONPATH:directory}},
   onState:state=>{
    port=state.status==="ready"?state.port:null;
    if(socket&&state.status!=="ready"){socket.close();socket=null;}
@@ -115,10 +119,10 @@ function launchBackend(){
  });
  service.start();
 }
-app.on("second-instance",openDashboard);
+app.on("second-instance",()=>{if(token)showWidget();else openDashboard();});
 app.on("before-quit",event=>{if(quitting)return;event.preventDefault();quitting=true;globalShortcut.unregisterAll();if(socket)socket.close();void (service?.stop()||Promise.resolve()).finally(()=>app.quit());});
-app.whenReady().then(()=>{loadSession();createTray();launchBackend();if(!process.argv.includes("--hidden"))openDashboard();if(token)showWidget();registerGlobalShortcuts();setInterval(()=>void checkFocusCompletion(),30000);
-  setTimeout(()=>void tryAutoUpdate(),120000);setInterval(()=>void tryAutoUpdate(),12*60*60*1000);app.on("activate",openDashboard);});
+app.whenReady().then(()=>{loadSession();createTray();launchBackend();if(token)showWidget();else if(!process.argv.includes("--hidden"))openDashboard();registerGlobalShortcuts();setInterval(()=>void checkFocusCompletion(),30000);
+  setTimeout(()=>void tryAutoUpdate(),120000);setInterval(()=>void tryAutoUpdate(),12*60*60*1000);app.on("activate",()=>{if(token)showWidget();else openDashboard();});});
 ipcMain.handle("backend:status",()=>({status:service?.state.status||"starting",message:service?.state.message||"Starting local service…"}));
 ipcMain.handle("backend:restart",async()=>{port=null;await service?.restart();return {status:service?.state.status||"starting",message:service?.state.message||"Starting local service…"};});
 ipcMain.handle("backend:open-log",async()=>{startupLog("Startup log opened");const error=await shell.openPath(startupLogPath());if(error)throw Error(error);});

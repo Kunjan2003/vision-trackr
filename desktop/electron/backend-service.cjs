@@ -1,6 +1,7 @@
 "use strict";
 // Owns only the process spawned by this application. Never attaches to another
 // agent or accepts its port without this launch's capability-authenticated health.
+const stripAnsi=value=>value.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,"");
 class BackendService {
  constructor(options){
   this.options=options;this.child=null;this.timer=null;this.retry=null;this.probe=null;
@@ -26,7 +27,7 @@ class BackendService {
     if(match&&!probing){const port=Number(match[1]);if(port>0&&port<=65535){probing=true;void this.checkHealth(generation,port);}}
    }
   });
-  child.stderr.on("data",chunk=>{if(generation!==this.generation)return;tail=(tail+chunk.toString()).slice(-6000);this.options.log(chunk.toString());});
+  child.stderr.on("data",chunk=>{if(generation!==this.generation)return;const output=stripAnsi(chunk.toString());tail=(tail+output).slice(-6000);this.options.log(output);});
   child.once("error",error=>{void this.fail(generation,"Cannot launch tracking service: "+error.message);});
   child.once("exit",(code,signal)=>{
    if(generation!==this.generation)return;

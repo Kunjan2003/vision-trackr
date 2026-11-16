@@ -13,7 +13,14 @@ def single_instance():
         kernel.CreateMutexW.restype = wintypes.HANDLE
         kernel.CloseHandle.argtypes = [wintypes.HANDLE]
         kernel.CloseHandle.restype = wintypes.BOOL
-        handle = kernel.CreateMutexW(None, False, "Local\\WorkPulsePythonAgent")
+        # Development and packaged builds may run side by side. Their data
+        # directories are separate, so their singleton locks must be separate
+        # as well. Packaged builds use the stable default name.
+        instance = os.getenv("WORKPULSE_INSTANCE", "production")
+        if not instance.replace("-", "").replace("_", "").isalnum():
+            raise ValueError("Invalid WorkPulse instance name")
+        mutex_name = "Local\\WorkPulsePythonAgent" if instance == "production" else f"Local\\WorkPulsePythonAgent-{instance}"
+        handle = kernel.CreateMutexW(None, False, mutex_name)
         if not handle:
             raise ctypes.WinError()
         if kernel.GetLastError() == 183:
